@@ -25,6 +25,18 @@ html, body {
   background: radial-gradient(ellipse at center, rgba(20,10,8,0.85), rgba(0,0,0,0.95));
   z-index: 50;
 }
+
+/* Painted artwork behind the login and character screens. */
+#screen-login {
+  background:
+    radial-gradient(ellipse at center, rgba(10,6,4,0.25), rgba(0,0,0,0.82)),
+    url('img/keyart.png') center / cover no-repeat #0a0807;
+}
+#screen-chars {
+  background:
+    radial-gradient(ellipse at center, rgba(10,6,4,0.35), rgba(0,0,0,0.88)),
+    url('img/title-bg.png') center / cover no-repeat #0a0807;
+}
 .hidden { display: none !important; }
 
 .panel {

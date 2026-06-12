@@ -277,6 +277,102 @@ const Sprites = (() => {
     }
   }
 
+  // -----------------------------------------------------------------------
+  // Optional AI-generated pixel-art sprites (rendered with ComfyUI, chroma-
+  // keyed to transparency). When a class has a fully loaded set,
+  // drawHeroSprite draws it and returns true; otherwise the caller falls
+  // back to the procedural paper doll above.
+
+  const SPRITE_SOURCES = {};
+  for (const cls of ['warrior', 'mage', 'rogue']) {
+    SPRITE_SOURCES[cls] = {};
+    for (const dir of ['front', 'back', 'side']) {
+      SPRITE_SOURCES[cls][dir] = {
+        idle: `img/sprites/${cls}-${dir}.png`,
+        walk: `img/sprites/${cls}-${dir}-walk.png`,
+        attack: `img/sprites/${cls}-${dir}-attack.png`,
+      };
+    }
+  }
+  for (const enemy of ['skeleton', 'zombie', 'demon', 'boss']) {
+    SPRITE_SOURCES[enemy] = { front: { idle: `img/sprites/${enemy}.png` } };
+  }
+
+  const spriteCache = {};
+  for (const [name, dirs] of Object.entries(SPRITE_SOURCES)) {
+    spriteCache[name] = {};
+    for (const [dir, poses] of Object.entries(dirs)) {
+      spriteCache[name][dir] = {};
+      for (const [pose, src] of Object.entries(poses)) {
+        const img = new Image();
+        img.onload = () => { spriteCache[name][dir][pose] = img; };
+        img.src = src;
+      }
+    }
+  }
+
+  function drawHeroSprite(ctx, o) {
+    const set = spriteCache[o.cls];
+    if (!set || !set.front.idle || !set.back.idle || !set.side.idle) return false;
+    const u = o.scale;
+    const t = o.time || 0;
+
+    // Same world facing -> screen facing mapping as drawHero.
+    const wc = Math.cos(o.facing || 0), ws = Math.sin(o.facing || 0);
+    let fx = wc - ws, fy = (wc + ws) / 2;
+    const fl = Math.hypot(fx, fy) || 1; fx /= fl; fy /= fl;
+
+    const dir = fy < -0.45 ? 'back' : (Math.abs(fx) > 0.7 ? 'side' : 'front');
+    const poses = set[dir];
+    const flip = dir === 'side' && fx > 0; // side art faces left
+
+    // Pose: attack frame during the swing, 2-frame walk cycle in stride
+    // with the idle frame, idle otherwise. Missing frames fall back to idle.
+    let img = poses.idle;
+    if (o.swing >= 0 && poses.attack) img = poses.attack;
+    else if (o.moving && poses.walk && Math.sin(t * 11) > 0) img = poses.walk;
+
+    const bob = o.moving ? Math.abs(Math.cos(t * 11)) * u * 0.14 : 0;
+    // Attack: a short lunge toward the facing direction sells the swing.
+    const lunge = o.swing >= 0 ? Math.sin(o.swing * Math.PI) * u * 0.4 : 0;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.ellipse(o.x, o.y, u * 1.05, u * 0.45, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    const ht = u * 3.4;
+    const wd = ht * (img.width / img.height);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(o.x + fx * lunge, o.y + fy * lunge * 0.5 - bob);
+    if (flip) ctx.scale(-1, 1);
+    ctx.drawImage(img, -wd / 2, -ht, wd, ht);
+    ctx.restore();
+
+    if (o.flash) {
+      ctx.fillStyle = 'rgba(255,90,70,0.5)';
+      ctx.beginPath();
+      ctx.ellipse(o.x, o.y - u * 1.4, u * 1.1, u * 1.7, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return true;
+  }
+
+  // Draws an enemy image sprite anchored at the feet; returns false when the
+  // image isn't loaded so the caller can fall back to procedural shapes.
+  function drawEnemySprite(ctx, type, x, y, height, flash) {
+    const img = spriteCache[type] && spriteCache[type].front.idle;
+    if (!img) return false;
+    const wd = height * (img.width / img.height);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (flash) ctx.filter = 'brightness(2.2)';
+    ctx.drawImage(img, x - wd / 2, y - height, wd, height);
+    ctx.restore();
+    return true;
+  }
+
   // Animated portrait for the character select screen.
   function drawPortrait(ctx, size, look, cls, time) {
     ctx.clearRect(0, 0, size, size);
@@ -286,6 +382,15 @@ const Sprites = (() => {
     g.addColorStop(1, '#120d08');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, size, size);
+    const img = spriteCache[cls] && spriteCache[cls].front.idle;
+    if (img) {
+      const ht = size * 0.9;
+      const wd = ht * (img.width / img.height);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, (size - wd) / 2, size * 0.96 - ht, wd, ht);
+      ctx.imageSmoothingEnabled = true;
+      return;
+    }
     drawHero(ctx, {
       x: size / 2, y: size * 0.92, scale: size / 3.6,
       facing: 1.9, moving: false, time,
@@ -293,5 +398,5 @@ const Sprites = (() => {
     });
   }
 
-  return { drawHero, drawPortrait };
+  return { drawHero, drawHeroSprite, drawEnemySprite, drawPortrait };
 })();

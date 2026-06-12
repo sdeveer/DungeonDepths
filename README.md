@@ -1,5 +1,7 @@
 # Dungeon Depths
 
+![Dungeon Depths banner](public/img/banner.png)
+
 A self-hostable, browser-based action RPG inspired by Diablo. Click your way
 through procedurally generated dungeons, slay skeletons, zombies and demons,
 fight a boss every 5 depths, and hoard randomized loot — with all progress

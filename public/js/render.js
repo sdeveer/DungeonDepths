@@ -35,6 +35,27 @@ const Render = (() => {
   // Cheap deterministic per-tile noise for floor variation.
   const tileNoise = (x, y) => ((x * 73856093) ^ (y * 19349663)) % 100 / 100;
 
+  // AI-generated terrain textures (ComfyUI). Tiles fall back to the
+  // procedural flat-shaded look until the images load (or if they 404).
+  const TERRAIN_SOURCES = {
+    floors: ['floor-a', 'floor-b', 'floor-c', 'floor-d'],
+    cobbles: ['cobble-a', 'cobble-b'],
+    walls: ['wall-a', 'wall-b'],
+    cap: 'cap',
+    stairs: 'stairs',
+    fountain: 'fountain',
+  };
+  const terrain = { floors: [], cobbles: [], walls: [], cap: null, stairs: null, fountain: null };
+  for (const [key, val] of Object.entries(TERRAIN_SOURCES)) {
+    const load = (name, cb) => {
+      const im = new Image();
+      im.onload = () => cb(im);
+      im.src = `img/terrain/${name}.png`;
+    };
+    if (Array.isArray(val)) val.forEach((name, i) => load(name, (im) => { terrain[key][i] = im; }));
+    else load(val, (im) => { terrain[key] = im; });
+  }
+
   function lightAt(S, tx, ty) {
     const i = ty * S.level.w + tx;
     if (!S.fog.discovered[i]) return 0;
@@ -64,26 +85,50 @@ const Render = (() => {
     const s = worldToScreen(tx, ty);
     const n = tileNoise(tx, ty);
 
-    // Cold gray-blue dungeon stone with slight per-tile variation.
-    const v = 52 + n * 18;
-    diamondPath(s);
-    ctx.fillStyle = `rgb(${(v - 6) * light | 0},${(v - 4) * light | 0},${v * light | 0})`;
-    ctx.fill();
-    // Grout.
-    ctx.strokeStyle = `rgba(0,0,0,${0.35 * light})`;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // Occasional cracked slab.
-    if (n > 0.8) {
-      ctx.strokeStyle = `rgba(0,0,0,${0.3 * light})`;
-      ctx.beginPath();
-      ctx.moveTo(s.x - TW * 0.15, s.y + TH * 0.35);
-      ctx.lineTo(s.x + TW * 0.1, s.y + TH * 0.6);
+    const pool = S.level.depth === 0 ? terrain.cobbles : terrain.floors;
+    const tex = tile === T.STAIRS && terrain.stairs
+      ? terrain.stairs
+      : pool[((tx * 7 + ty * 13) >>> 0) % (pool.length || 1)];
+
+    if (tex) {
+      // Texture squashed into the diamond; clipping keeps the seams exact.
+      ctx.save();
+      diamondPath(s);
+      ctx.clip();
+      ctx.imageSmoothingEnabled = false;
+      // Sample one quadrant per tile: larger texture features at this
+      // scale, and neighboring tiles stop looking like exact copies.
+      const q = ((tx * 31 + ty * 17) >>> 0) % 4;
+      const half = tex.width / 2;
+      ctx.drawImage(tex, (q & 1) * half, (q >> 1) * half, half, half,
+        s.x - TW / 2, s.y, TW, TH);
+      ctx.restore();
+      // Lighting and fog as a darkness overlay (keeps the torch flicker).
+      diamondPath(s);
+      ctx.fillStyle = `rgba(4,6,12,${Math.min(0.95, 1 - light)})`;
+      ctx.fill();
+    } else {
+      // Procedural fallback: cold gray-blue stone with per-tile variation.
+      const v = 52 + n * 18;
+      diamondPath(s);
+      ctx.fillStyle = `rgb(${(v - 6) * light | 0},${(v - 4) * light | 0},${v * light | 0})`;
+      ctx.fill();
+      // Grout.
+      ctx.strokeStyle = `rgba(0,0,0,${0.35 * light})`;
+      ctx.lineWidth = 1;
       ctx.stroke();
+      // Occasional cracked slab.
+      if (n > 0.8) {
+        ctx.strokeStyle = `rgba(0,0,0,${0.3 * light})`;
+        ctx.beginPath();
+        ctx.moveTo(s.x - TW * 0.15, s.y + TH * 0.35);
+        ctx.lineTo(s.x + TW * 0.1, s.y + TH * 0.6);
+        ctx.stroke();
+      }
+      if (tile === T.STAIRS) drawStairs(s, light);
     }
 
-    if (tile === T.STAIRS) drawStairs(s, light);
-    else if (tile === T.PORTAL) drawPortal(S, tx, ty, light);
+    if (tile === T.PORTAL) drawPortal(S, tx, ty, light);
     else if (tile === T.FOUNTAIN) drawFountain(S, tx, ty, light);
   }
 
@@ -121,6 +166,16 @@ const Render = (() => {
 
   function drawFountain(S, tx, ty, light) {
     const c = worldToScreen(tx + 0.5, ty + 0.5);
+    if (terrain.fountain) {
+      // Soft magical glow at the base; the fountain itself is a sprite
+      // object drawn depth-sorted in pass 2.
+      const shimmer = 0.5 + Math.sin(S.time * 3) * 0.12;
+      ctx.fillStyle = `rgba(70,160,220,${shimmer * light * 0.5})`;
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      return;
+    }
     ctx.fillStyle = `rgba(70,60,50,${light})`;
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, TW * 0.36, TH * 0.36, 0, 0, Math.PI * 2);
@@ -132,6 +187,18 @@ const Render = (() => {
     ctx.fill();
   }
 
+  function drawFountainObject(S, tx, ty, light) {
+    const img = terrain.fountain;
+    const c = worldToScreen(tx + 0.5, ty + 0.5);
+    const ht = TH * 2.4;
+    const wd = ht * (img.width / img.height);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, light + 0.1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, c.x - wd / 2, c.y + TH / 2 - ht, wd, ht);
+    ctx.restore();
+  }
+
   // Raised isometric wall block: lit top cap, two shaded front faces.
   function drawWallBlock(S, tx, ty, light) {
     const s = worldToScreen(tx, ty);
@@ -141,6 +208,49 @@ const Render = (() => {
     const B = { x: s.x + TW / 2, y: s.y + TH / 2 };
     const C = { x: s.x, y: s.y + TH };
     const D = { x: s.x - TW / 2, y: s.y + TH / 2 };
+
+    const wallTex = terrain.walls[((tx * 5 + ty * 11) >>> 0) % (terrain.walls.length || 1)];
+    if (wallTex && terrain.cap) {
+      // Texture each face inside its clipped polygon; per-face brightness
+      // (cap lit, left dimmer, right darkest) via a darkness overlay.
+      const face = (pts, tex, shade) => {
+        const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
+        const x0 = Math.min(...xs), y0 = Math.min(...ys);
+        const path = () => {
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+          ctx.closePath();
+        };
+        ctx.save();
+        path();
+        ctx.clip();
+        ctx.imageSmoothingEnabled = false;
+        const q = ((tx * 13 + ty * 29) >>> 0) % 4;
+        const half = tex.width / 2;
+        ctx.drawImage(tex, (q & 1) * half, (q >> 1) * half, half, half,
+          x0, y0, Math.max(...xs) - x0, Math.max(...ys) - y0);
+        ctx.restore();
+        path();
+        ctx.fillStyle = `rgba(4,6,12,${Math.min(0.95, 1 - shade * light)})`;
+        ctx.fill();
+      };
+      const up = (p) => ({ x: p.x, y: p.y - WALL_H });
+      face([up(D), up(C), C, D], wallTex, 0.7);
+      face([up(C), up(B), B, C], wallTex, 0.45);
+      face([up(A), up(B), up(C), up(D)], terrain.cap, 1.0);
+      // Crisp top edge.
+      ctx.strokeStyle = `rgba(0,0,0,${0.4 * light})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(A.x, A.y - WALL_H);
+      ctx.lineTo(B.x, B.y - WALL_H);
+      ctx.lineTo(C.x, C.y - WALL_H);
+      ctx.lineTo(D.x, D.y - WALL_H);
+      ctx.closePath();
+      ctx.stroke();
+      return;
+    }
 
     // Left face (lit a bit warmer, as if by torchlight).
     ctx.fillStyle = stone(v * 0.55, light);
@@ -243,33 +353,36 @@ const Render = (() => {
 
     const flash = e.flash > 0;
     const by = s.y - r;                 // body center, raised off the ground
-    // Body.
-    ctx.fillStyle = flash ? '#ffffff' : look.body;
-    ctx.beginPath();
-    ctx.ellipse(s.x, by, r * 0.8, r, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Head.
-    ctx.fillStyle = flash ? '#ffffff' : look.head;
-    ctx.beginPath();
-    ctx.arc(s.x, by - r * 0.9, r * 0.55, 0, Math.PI * 2);
-    ctx.fill();
-    // Horns.
-    if (look.horns) {
-      ctx.strokeStyle = flash ? '#ffffff' : '#d8c8a8';
-      ctx.lineWidth = Math.max(2, r * 0.16);
+    // Image sprite when available; procedural shapes otherwise.
+    if (!Sprites.drawEnemySprite(ctx, e.type, s.x, s.y, r * 3.1, flash)) {
+      // Body.
+      ctx.fillStyle = flash ? '#ffffff' : look.body;
       ctx.beginPath();
-      ctx.moveTo(s.x - r * 0.45, by - r * 1.15);
-      ctx.quadraticCurveTo(s.x - r * 0.8, by - r * 1.6, s.x - r * 0.55, by - r * 1.85);
-      ctx.moveTo(s.x + r * 0.45, by - r * 1.15);
-      ctx.quadraticCurveTo(s.x + r * 0.8, by - r * 1.6, s.x + r * 0.55, by - r * 1.85);
-      ctx.stroke();
+      ctx.ellipse(s.x, by, r * 0.8, r, 0, 0, Math.PI * 2);
+      ctx.fill();
+      // Head.
+      ctx.fillStyle = flash ? '#ffffff' : look.head;
+      ctx.beginPath();
+      ctx.arc(s.x, by - r * 0.9, r * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      // Horns.
+      if (look.horns) {
+        ctx.strokeStyle = flash ? '#ffffff' : '#d8c8a8';
+        ctx.lineWidth = Math.max(2, r * 0.16);
+        ctx.beginPath();
+        ctx.moveTo(s.x - r * 0.45, by - r * 1.15);
+        ctx.quadraticCurveTo(s.x - r * 0.8, by - r * 1.6, s.x - r * 0.55, by - r * 1.85);
+        ctx.moveTo(s.x + r * 0.45, by - r * 1.15);
+        ctx.quadraticCurveTo(s.x + r * 0.8, by - r * 1.6, s.x + r * 0.55, by - r * 1.85);
+        ctx.stroke();
+      }
+      // Glowing eyes.
+      ctx.fillStyle = look.eye;
+      ctx.beginPath();
+      ctx.arc(s.x - r * 0.2, by - r * 0.95, r * 0.09, 0, Math.PI * 2);
+      ctx.arc(s.x + r * 0.2, by - r * 0.95, r * 0.09, 0, Math.PI * 2);
+      ctx.fill();
     }
-    // Glowing eyes.
-    ctx.fillStyle = look.eye;
-    ctx.beginPath();
-    ctx.arc(s.x - r * 0.2, by - r * 0.95, r * 0.09, 0, Math.PI * 2);
-    ctx.arc(s.x + r * 0.2, by - r * 0.95, r * 0.09, 0, Math.PI * 2);
-    ctx.fill();
 
     // HP bar when wounded.
     if (e.hp < e.maxHp) {
@@ -294,7 +407,7 @@ const Render = (() => {
   function drawPlayer(S) {
     const p = S.player;
     const s = worldToScreen(p.x, p.y); // feet position
-    Sprites.drawHero(ctx, {
+    const opts = {
       x: s.x, y: s.y, scale: E * 0.36,
       facing: p.facing, moving: !!p.moving, time: S.time,
       swing: p.swing > 0 ? 1 - p.swing / 0.18 : -1,
@@ -302,7 +415,9 @@ const Render = (() => {
       hasWeapon: S.items.some((it) => it.equipped && it.kind === 'weapon'),
       hasArmor: S.items.some((it) => it.equipped && it.kind === 'armor'),
       flash: p.hitFlash > 0,
-    });
+    };
+    // Image sprites when available for this class; procedural otherwise.
+    if (!Sprites.drawHeroSprite(ctx, opts)) Sprites.drawHero(ctx, opts);
   }
 
   function drawProjectiles(S) {
@@ -597,10 +712,16 @@ const Render = (() => {
     const drawables = [];
     for (let ty = 0; ty < h; ty++) {
       for (let tx = 0; tx < w; tx++) {
-        if (map[ty * w + tx] !== T.WALL) continue;
+        const tile = map[ty * w + tx];
+        const isFountainObj = tile === T.FOUNTAIN && terrain.fountain;
+        if (tile !== T.WALL && !isFountainObj) continue;
         const light = lightAt(S, tx, ty);
         if (light <= 0) continue;
         if (!onScreen(worldToScreen(tx, ty), TW + WALL_H)) continue;
+        if (isFountainObj) {
+          drawables.push({ depth: tx + ty + 1, fountain: { tx, ty, light } });
+          continue;
+        }
         // Sort walls by their tile center: an entity standing in front of
         // (south/east of) the block sorts after it, behind sorts before it.
         // Using the bottom corner instead draws walls over characters
@@ -615,6 +736,7 @@ const Render = (() => {
     drawables.sort((a, b) => a.depth - b.depth);
     for (const d of drawables) {
       if (d.wall) drawWallBlock(S, d.wall.tx, d.wall.ty, d.wall.light);
+      else if (d.fountain) drawFountainObject(S, d.fountain.tx, d.fountain.ty, d.fountain.light);
       else if (d.enemy) drawEnemy(S, d.enemy);
       else drawPlayer(S);
     }
