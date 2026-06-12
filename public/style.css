@@ -1,0 +1,170 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --gold: #c8a24b;
+  --blood: #8a1f1f;
+  --panel-bg: rgba(16, 12, 10, 0.96);
+  --panel-border: #4a3826;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: #0a0807;
+  font-family: Georgia, 'Times New Roman', serif;
+  color: #d8cdb8;
+  user-select: none;
+}
+
+#game { display: block; width: 100vw; height: 100vh; cursor: crosshair; }
+
+/* ----- Screens / overlays ----- */
+.screen {
+  position: fixed; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(20,10,8,0.85), rgba(0,0,0,0.95));
+  z-index: 50;
+}
+.hidden { display: none !important; }
+
+.panel {
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border);
+  border-radius: 6px;
+  box-shadow: 0 0 60px rgba(0,0,0,0.9), inset 0 0 30px rgba(0,0,0,0.6);
+  padding: 32px 40px;
+}
+.center-panel { min-width: 380px; max-width: 480px; text-align: center; }
+
+.title {
+  font-size: 36px; letter-spacing: 6px; color: var(--gold);
+  text-shadow: 0 0 18px rgba(200,130,40,0.5), 0 2px 2px #000;
+  margin-bottom: 6px;
+}
+.title.small { font-size: 24px; letter-spacing: 4px; }
+.death-title { color: #c03020; text-shadow: 0 0 24px rgba(180,30,20,0.7); }
+.subtitle { font-style: italic; color: #8a7c64; margin-bottom: 24px; }
+
+input[type="text"], input[type="password"] {
+  display: block; width: 100%;
+  margin: 10px 0; padding: 10px 12px;
+  background: #1a140f; color: #e8dcc0;
+  border: 1px solid var(--panel-border); border-radius: 3px;
+  font-family: inherit; font-size: 16px;
+}
+input:focus { outline: none; border-color: var(--gold); }
+
+button {
+  padding: 10px 22px;
+  background: linear-gradient(#3a2c1c, #241a10);
+  color: var(--gold);
+  border: 1px solid var(--panel-border); border-radius: 3px;
+  font-family: inherit; font-size: 15px; letter-spacing: 1px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--gold); color: #ffe8b0; }
+.button-row { display: flex; gap: 12px; justify-content: center; margin-top: 18px; }
+.button-row.column { flex-direction: column; align-items: stretch; }
+
+.error { color: #d8584a; min-height: 20px; margin-top: 8px; font-size: 14px; }
+.hint { color: #6f6450; font-size: 12px; }
+
+/* ----- Character select ----- */
+#char-list { margin: 18px 0; }
+.char-card {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 16px; margin: 8px 0;
+  background: #1a140f; border: 1px solid var(--panel-border); border-radius: 4px;
+  cursor: pointer; text-align: left;
+}
+.char-card:hover { border-color: var(--gold); background: #241c12; }
+.char-card .char-name { font-size: 18px; color: #e8dcc0; }
+.char-card .char-meta { font-size: 13px; color: #8a7c64; }
+.char-card .char-info { flex: 1; margin-left: 12px; text-align: left; }
+.char-portrait {
+  width: 44px; height: 44px; border-radius: 4px;
+  border: 1px solid #4a3826; flex-shrink: 0;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.6);
+}
+.char-card .char-del { font-size: 18px; color: #6f4034; padding: 4px 10px; background: none; border: none; }
+.char-card .char-del:hover { color: #d8584a; }
+
+.class-row { display: flex; gap: 10px; margin: 12px 0; }
+.class-btn { flex: 1; padding: 14px 6px; line-height: 1.5; font-size: 15px; }
+.class-btn small { color: #8a7c64; font-size: 11px; }
+.class-btn.selected { border-color: var(--gold); background: #2e2416; color: #ffe8b0; }
+
+/* ----- Inventory ----- */
+#inv-panel {
+  position: fixed; top: 50%; right: 24px; transform: translateY(-50%);
+  width: 380px; z-index: 40;
+  background: var(--panel-bg);
+  border: 2px solid var(--panel-border); border-radius: 6px;
+  padding: 16px 18px;
+  box-shadow: 0 0 40px rgba(0,0,0,0.9);
+}
+#inv-panel h2 { color: var(--gold); font-size: 18px; letter-spacing: 2px; margin-bottom: 10px; }
+
+#inv-equipped { display: flex; gap: 10px; margin-bottom: 10px; }
+.equip-slot {
+  flex: 1; min-height: 56px; padding: 6px 8px;
+  background: #15100b; border: 1px solid #3a2e1e; border-radius: 4px;
+}
+.slot-label { font-size: 11px; color: #6f6450; text-transform: uppercase; letter-spacing: 1px; }
+.slot-item { font-size: 13px; margin-top: 3px; cursor: pointer; }
+
+#inv-stats {
+  font-size: 12px; color: #a89878; margin-bottom: 10px; line-height: 1.7;
+  border-top: 1px solid #2c2316; border-bottom: 1px solid #2c2316; padding: 6px 0;
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+}
+
+#inv-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-bottom: 8px;
+}
+.inv-cell {
+  aspect-ratio: 1; background: #15100b;
+  border: 1px solid #2c2316; border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 17px; cursor: pointer; position: relative;
+}
+.inv-cell:hover { border-color: var(--gold); }
+.inv-cell.equipped::after {
+  content: 'E'; position: absolute; top: 1px; right: 3px;
+  font-size: 9px; color: var(--gold);
+}
+
+/* ----- Tooltip ----- */
+#tooltip {
+  position: fixed; z-index: 60; pointer-events: none;
+  background: rgba(8, 6, 4, 0.97); border: 1px solid var(--panel-border);
+  border-radius: 4px; padding: 10px 14px; max-width: 240px;
+  font-size: 13px; line-height: 1.6;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.8);
+}
+#tooltip .tt-name { font-size: 15px; margin-bottom: 2px; }
+#tooltip .tt-kind { color: #6f6450; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+#tooltip .tt-stat { color: #9fb4d8; }
+
+/* ----- Death ----- */
+#death-stats { margin: 16px 0; line-height: 2; font-size: 15px; color: #b0a288; }
+#death-stats b { color: #e8dcc0; }
+.panel.death { border-color: #5a2018; }
+
+/* ----- Toasts ----- */
+#toasts {
+  position: fixed; left: 50%; bottom: 130px; transform: translateX(-50%);
+  z-index: 45; pointer-events: none; text-align: center;
+}
+.toast {
+  margin-top: 6px; padding: 6px 18px;
+  background: rgba(10, 8, 6, 0.85); border: 1px solid var(--panel-border);
+  border-radius: 4px; font-size: 14px;
+  animation: toast-fade 4s forwards;
+}
+@keyframes toast-fade {
+  0% { opacity: 0; transform: translateY(8px); }
+  8% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}

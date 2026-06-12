@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dungeon Depths</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- Login / register -->
+  <div id="screen-login" class="screen">
+    <div class="panel center-panel">
+      <h1 class="title">DUNGEON&nbsp;DEPTHS</h1>
+      <p class="subtitle">Stay awhile and listen…</p>
+      <form id="login-form">
+        <input id="login-username" type="text" placeholder="Username" autocomplete="username" maxlength="20">
+        <input id="login-password" type="password" placeholder="Password" autocomplete="current-password">
+        <div id="login-error" class="error"></div>
+        <div class="button-row">
+          <button type="submit" id="btn-login">Enter</button>
+          <button type="button" id="btn-register">Create Account</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Character select -->
+  <div id="screen-chars" class="screen hidden">
+    <div class="panel center-panel">
+      <h1 class="title small">CHOOSE YOUR HERO</h1>
+      <div id="char-list"></div>
+      <div id="char-create" class="hidden">
+        <input id="char-name" type="text" placeholder="Character name" maxlength="16">
+        <div class="class-row">
+          <button class="class-btn" data-class="warrior">⚔️<br>Warrior<br><small>strong &amp; tough</small></button>
+          <button class="class-btn" data-class="mage">🔥<br>Mage<br><small>potent spells</small></button>
+          <button class="class-btn" data-class="rogue">🗡️<br>Rogue<br><small>fast strikes</small></button>
+        </div>
+      </div>
+      <div id="chars-error" class="error"></div>
+      <div class="button-row">
+        <button id="btn-new-char">New Character</button>
+        <button id="btn-random-char" title="Generate a random hero">🎲 Random Hero</button>
+        <button id="btn-logout">Log Out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Inventory -->
+  <div id="inv-panel" class="hidden">
+    <h2>Inventory <span class="hint">(I to close)</span></h2>
+    <div id="inv-equipped">
+      <div class="equip-slot" id="slot-weapon"><span class="slot-label">Weapon</span><div class="slot-item"></div></div>
+      <div class="equip-slot" id="slot-armor"><span class="slot-label">Armor</span><div class="slot-item"></div></div>
+    </div>
+    <div id="inv-stats"></div>
+    <div id="inv-grid"></div>
+    <p class="hint">Click: equip / drink &nbsp;·&nbsp; Shift+Click: destroy</p>
+  </div>
+
+  <!-- Item tooltip -->
+  <div id="tooltip" class="hidden"></div>
+
+  <!-- Death screen -->
+  <div id="screen-death" class="screen hidden">
+    <div class="panel center-panel death">
+      <h1 class="title death-title">YOU HAVE DIED</h1>
+      <div id="death-stats"></div>
+      <div class="button-row">
+        <button id="btn-respawn">Rise in Town</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-game menu (Esc) -->
+  <div id="screen-menu" class="screen hidden">
+    <div class="panel center-panel">
+      <h1 class="title small">PAUSED</h1>
+      <div class="button-row column">
+        <button id="btn-resume">Resume</button>
+        <button id="btn-char-select">Save &amp; Character Select</button>
+        <button id="btn-menu-logout">Save &amp; Log Out</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts"></div>
+
+  <script src="js/shared.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/dungeon.js"></script>
+  <script src="js/sprites.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
