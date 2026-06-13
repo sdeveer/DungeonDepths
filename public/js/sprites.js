@@ -291,11 +291,22 @@ const Sprites = (() => {
         idle: `img/sprites/${cls}-${dir}.png`,
         walk: `img/sprites/${cls}-${dir}-walk.png`,
         attack: `img/sprites/${cls}-${dir}-attack.png`,
+        windup: `img/sprites/${cls}-${dir}-windup.png`,
+        hit: `img/sprites/${cls}-${dir}-hit.png`,
       };
     }
+    // Death collapse exists as a single (front) frame per class.
+    SPRITE_SOURCES[cls].front.death = `img/sprites/${cls}-death.png`;
   }
   for (const enemy of ['skeleton', 'zombie', 'demon', 'boss']) {
-    SPRITE_SOURCES[enemy] = { front: { idle: `img/sprites/${enemy}.png` } };
+    SPRITE_SOURCES[enemy] = {
+      front: {
+        idle: `img/sprites/${enemy}.png`,
+        walk: `img/sprites/${enemy}-walk.png`,
+        attack: `img/sprites/${enemy}-attack.png`,
+        death: `img/sprites/${enemy}-death.png`,
+      },
+    };
   }
 
   const spriteCache = {};
@@ -326,22 +337,28 @@ const Sprites = (() => {
     const poses = set[dir];
     const flip = dir === 'side' && fx > 0; // side art faces left
 
-    // Pose: attack frame during the swing, 2-frame walk cycle in stride
-    // with the idle frame, idle otherwise. Missing frames fall back to idle.
+    // Pose priority: death > attack (wind-up then strike) > hit flinch >
+    // walk cycle > idle. Missing frames fall back to idle.
     let img = poses.idle;
-    if (o.swing >= 0 && poses.attack) img = poses.attack;
+    let isDeath = false;
+    if (o.dead && set.front.death) { img = set.front.death; isDeath = true; }
+    else if (o.swing >= 0) {
+      img = (o.swing < 0.5 ? (poses.windup || poses.attack) : poses.attack) || poses.idle;
+    } else if (o.flash && poses.hit) img = poses.hit;
     else if (o.moving && poses.walk && Math.sin(t * 11) > 0) img = poses.walk;
 
-    const bob = o.moving ? Math.abs(Math.cos(t * 11)) * u * 0.14 : 0;
+    const bob = o.moving && !o.dead ? Math.abs(Math.cos(t * 11)) * u * 0.14 : 0;
     // Attack: a short lunge toward the facing direction sells the swing.
-    const lunge = o.swing >= 0 ? Math.sin(o.swing * Math.PI) * u * 0.4 : 0;
+    const lunge = o.swing >= 0 && !o.dead ? Math.sin(o.swing * Math.PI) * u * 0.4 : 0;
 
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath();
     ctx.ellipse(o.x, o.y, u * 1.05, u * 0.45, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const ht = u * 3.4;
+    // Collapsed poses are short and wide; height-normalizing them like a
+    // standing frame would inflate the body.
+    const ht = u * (isDeath ? 2.3 : 3.4);
     const wd = ht * (img.width / img.height);
     ctx.save();
     ctx.imageSmoothingEnabled = false;
@@ -350,8 +367,9 @@ const Sprites = (() => {
     ctx.drawImage(img, -wd / 2, -ht, wd, ht);
     ctx.restore();
 
-    if (o.flash) {
-      ctx.fillStyle = 'rgba(255,90,70,0.5)';
+    if (o.flash && !o.dead) {
+      // Softer red wash when a dedicated flinch frame carries the hit.
+      ctx.fillStyle = `rgba(255,90,70,${poses.hit ? 0.22 : 0.5})`;
       ctx.beginPath();
       ctx.ellipse(o.x, o.y - u * 1.4, u * 1.1, u * 1.7, 0, 0, Math.PI * 2);
       ctx.fill();
@@ -361,8 +379,13 @@ const Sprites = (() => {
 
   // Draws an enemy image sprite anchored at the feet; returns false when the
   // image isn't loaded so the caller can fall back to procedural shapes.
-  function drawEnemySprite(ctx, type, x, y, height, flash) {
-    const img = spriteCache[type] && spriteCache[type].front.idle;
+  // `pose` is one of idle/walk/attack/death; missing poses use idle, except
+  // death which draws nothing without its frame (the corpse decal remains).
+  function drawEnemySprite(ctx, type, x, y, height, flash, pose) {
+    const poses = spriteCache[type] && spriteCache[type].front;
+    if (!poses) return false;
+    if (pose === 'death' && !poses.death) return false;
+    const img = poses[pose] || poses.idle;
     if (!img) return false;
     const wd = height * (img.width / img.height);
     ctx.save();

@@ -35,25 +35,65 @@ const Render = (() => {
   // Cheap deterministic per-tile noise for floor variation.
   const tileNoise = (x, y) => ((x * 73856093) ^ (y * 19349663)) % 100 / 100;
 
+  // Environment themes by depth band, Diablo II act style. Town walls reuse
+  // the crypt tileset.
+  function themeFor(depth) {
+    if (depth === 0) return 'town';
+    if (depth < 5) return 'crypt';
+    if (depth < 10) return 'cave';
+    if (depth < 15) return 'sunken';
+    return 'hell';
+  }
+  const THEME_INFO = {
+    town:   { name: 'Town of Last Light', tint: null },
+    crypt:  { name: 'The Catacombs',      tint: 'rgba(30,50,110,0.07)' },
+    cave:   { name: 'The Hollow Caves',   tint: 'rgba(110,70,30,0.07)' },
+    sunken: { name: 'The Drowned Halls',  tint: 'rgba(20,110,80,0.08)' },
+    hell:   { name: 'The Burning Depths', tint: 'rgba(150,20,5,0.11)' },
+  };
+  const THEME_DECOR = {
+    crypt:  ['sarcophagus', 'bones', 'pillar'],
+    cave:   ['stalagmite', 'rubble', 'bones'],
+    sunken: ['pillar', 'rubble', 'bones'],
+    hell:   ['statue', 'skulls', 'rubble'],
+  };
+  const DECOR_SCALE = {
+    sarcophagus: 1.9, pillar: 1.8, statue: 2.1, stalagmite: 1.8,
+    rubble: 1.3, bones: 0.9, skulls: 1.0,
+  };
+
   // AI-generated terrain textures (ComfyUI). Tiles fall back to the
   // procedural flat-shaded look until the images load (or if they 404).
   const TERRAIN_SOURCES = {
-    floors: ['floor-a', 'floor-b', 'floor-c', 'floor-d'],
+    themes: {
+      crypt:  { floors: ['floor-a', 'floor-b', 'floor-c', 'floor-d'], walls: ['wall-a', 'wall-b'], cap: 'cap' },
+      cave:   { floors: ['cave-floor-a', 'cave-floor-b'], walls: ['cave-wall'], cap: 'cave-cap' },
+      sunken: { floors: ['sunken-floor-a', 'sunken-floor-b'], walls: ['sunken-wall'], cap: 'sunken-cap' },
+      hell:   { floors: ['hell-floor-a', 'hell-floor-b'], walls: ['hell-wall'], cap: 'hell-cap' },
+    },
     cobbles: ['cobble-a', 'cobble-b'],
-    walls: ['wall-a', 'wall-b'],
-    cap: 'cap',
     stairs: 'stairs',
     fountain: 'fountain',
+    decor: ['torch', 'sarcophagus', 'bones', 'pillar', 'stalagmite', 'rubble', 'statue', 'skulls'],
   };
-  const terrain = { floors: [], cobbles: [], walls: [], cap: null, stairs: null, fountain: null };
-  for (const [key, val] of Object.entries(TERRAIN_SOURCES)) {
+  const terrain = { themes: {}, cobbles: [], stairs: null, fountain: null, decor: {} };
+  {
     const load = (name, cb) => {
       const im = new Image();
       im.onload = () => cb(im);
       im.src = `img/terrain/${name}.png`;
     };
-    if (Array.isArray(val)) val.forEach((name, i) => load(name, (im) => { terrain[key][i] = im; }));
-    else load(val, (im) => { terrain[key] = im; });
+    for (const [tname, set] of Object.entries(TERRAIN_SOURCES.themes)) {
+      const t = { floors: [], walls: [], cap: null };
+      terrain.themes[tname] = t;
+      set.floors.forEach((n, i) => load(n, (im) => { t.floors[i] = im; }));
+      set.walls.forEach((n, i) => load(n, (im) => { t.walls[i] = im; }));
+      load(set.cap, (im) => { t.cap = im; });
+    }
+    TERRAIN_SOURCES.cobbles.forEach((n, i) => load(n, (im) => { terrain.cobbles[i] = im; }));
+    load(TERRAIN_SOURCES.stairs, (im) => { terrain.stairs = im; });
+    load(TERRAIN_SOURCES.fountain, (im) => { terrain.fountain = im; });
+    for (const n of TERRAIN_SOURCES.decor) load(n, (im) => { terrain.decor[n] = im; });
   }
 
   function lightAt(S, tx, ty) {
@@ -85,7 +125,9 @@ const Render = (() => {
     const s = worldToScreen(tx, ty);
     const n = tileNoise(tx, ty);
 
-    const pool = S.level.depth === 0 ? terrain.cobbles : terrain.floors;
+    const theme = themeFor(S.level.depth);
+    const tset = terrain.themes[theme];
+    const pool = theme === 'town' ? terrain.cobbles : (tset ? tset.floors : []);
     const tex = tile === T.STAIRS && terrain.stairs
       ? terrain.stairs
       : pool[((tx * 7 + ty * 13) >>> 0) % (pool.length || 1)];
@@ -199,6 +241,43 @@ const Render = (() => {
     ctx.restore();
   }
 
+  function drawDecor(S, d, light) {
+    const kinds = THEME_DECOR[themeFor(S.level.depth)];
+    const img = kinds && terrain.decor[kinds[d.kind % kinds.length]];
+    if (!img) return;
+    const s = worldToScreen(d.x, d.y);
+    const ht = TH * (DECOR_SCALE[kinds[d.kind % kinds.length]] || 1.4);
+    const wd = ht * (img.width / img.height);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, light + 0.1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, s.x - wd / 2, s.y + TH * 0.25 - ht, wd, ht);
+    ctx.restore();
+  }
+
+  // Wall-mounted torch with a flickering glow, hung on the left face.
+  function drawTorch(S, tx, ty, light) {
+    const img = terrain.decor.torch;
+    if (!img) return;
+    const s = worldToScreen(tx, ty);
+    const cx = s.x - TW / 4, cy = s.y + TH * 0.75 - WALL_H * 0.35;
+    const ht = WALL_H * 0.65;
+    const wd = ht * (img.width / img.height);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, light + 0.25);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, cx - wd / 2, cy - ht / 2, wd, ht);
+    ctx.restore();
+    const flicker = 0.8 + Math.sin(S.time * 13 + tx * 5 + ty * 3) * 0.12
+                  + Math.sin(S.time * 29 + tx) * 0.06;
+    const g = ctx.createRadialGradient(cx, cy - ht * 0.3, 2, cx, cy - ht * 0.3, TW * 0.9 * flicker);
+    g.addColorStop(0, `rgba(255,170,60,${0.32 * Math.min(1, light * 2)})`);
+    g.addColorStop(0.5, `rgba(255,120,30,${0.12 * Math.min(1, light * 2)})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - TW, cy - ht * 0.3 - TW, TW * 2, TW * 2);
+  }
+
   // Raised isometric wall block: lit top cap, two shaded front faces.
   function drawWallBlock(S, tx, ty, light) {
     const s = worldToScreen(tx, ty);
@@ -209,8 +288,9 @@ const Render = (() => {
     const C = { x: s.x, y: s.y + TH };
     const D = { x: s.x - TW / 2, y: s.y + TH / 2 };
 
-    const wallTex = terrain.walls[((tx * 5 + ty * 11) >>> 0) % (terrain.walls.length || 1)];
-    if (wallTex && terrain.cap) {
+    const tset = terrain.themes[themeFor(S.level.depth)] || terrain.themes.crypt;
+    const wallTex = tset.walls[((tx * 5 + ty * 11) >>> 0) % (tset.walls.length || 1)];
+    if (wallTex && tset.cap) {
       // Texture each face inside its clipped polygon; per-face brightness
       // (cap lit, left dimmer, right darkest) via a darkness overlay.
       const face = (pts, tex, shade) => {
@@ -238,7 +318,7 @@ const Render = (() => {
       const up = (p) => ({ x: p.x, y: p.y - WALL_H });
       face([up(D), up(C), C, D], wallTex, 0.7);
       face([up(C), up(B), B, C], wallTex, 0.45);
-      face([up(A), up(B), up(C), up(D)], terrain.cap, 1.0);
+      face([up(A), up(B), up(C), up(D)], tset.cap, 1.0);
       // Crisp top edge.
       ctx.strokeStyle = `rgba(0,0,0,${0.4 * light})`;
       ctx.lineWidth = 1;
@@ -347,14 +427,26 @@ const Render = (() => {
     const r = look.size * E;
     const s = worldToScreen(e.x, e.y); // feet position
 
+    // Dying: play the collapse frame, fading out over the corpse decal.
+    if (e.dead) {
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, light + 0.15) * Math.max(0, 1 - e.deadT / 0.9);
+      Sprites.drawEnemySprite(ctx, e.type, s.x, s.y, r * 3.1, false, 'death');
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.globalAlpha = Math.min(1, light + 0.15);
     drawShadow(s, r);
 
     const flash = e.flash > 0;
     const by = s.y - r;                 // body center, raised off the ground
+    let pose = 'idle';
+    if (e.attackT > 0) pose = 'attack';
+    else if (e.moving && Math.sin(S.time * 9 + (e.x + e.y) * 2) > 0) pose = 'walk';
     // Image sprite when available; procedural shapes otherwise.
-    if (!Sprites.drawEnemySprite(ctx, e.type, s.x, s.y, r * 3.1, flash)) {
+    if (!Sprites.drawEnemySprite(ctx, e.type, s.x, s.y, r * 3.1, flash, pose)) {
       // Body.
       ctx.fillStyle = flash ? '#ffffff' : look.body;
       ctx.beginPath();
@@ -415,6 +507,7 @@ const Render = (() => {
       hasWeapon: S.items.some((it) => it.equipped && it.kind === 'weapon'),
       hasArmor: S.items.some((it) => it.equipped && it.kind === 'armor'),
       flash: p.hitFlash > 0,
+      dead: S.deathPending,
     };
     // Image sprites when available for this class; procedural otherwise.
     if (!Sprites.drawHeroSprite(ctx, opts)) Sprites.drawHero(ctx, opts);
@@ -473,6 +566,13 @@ const Render = (() => {
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Theme color grading: each environment gets its own cast.
+    const tint = THEME_INFO[themeFor(S.level.depth)].tint;
+    if (tint) {
+      ctx.fillStyle = tint;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
     // Vignette.
     const vr = Math.max(canvas.width, canvas.height) * 0.75;
     const vig = ctx.createRadialGradient(
@@ -494,6 +594,26 @@ const Render = (() => {
       red.addColorStop(1, `rgba(150,10,5,${Math.min(0.5, a)})`);
       ctx.fillStyle = red;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  // Drifting embers in the Burning Depths.
+  const embers = [];
+  function drawEmbers(S) {
+    if (themeFor(S.level.depth) !== 'hell') { embers.length = 0; return; }
+    if (embers.length === 0) {
+      for (let i = 0; i < 36; i++) {
+        embers.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random(), p: Math.random() * 6 });
+      }
+    }
+    for (const e of embers) {
+      e.y -= 0.0009 * e.s;
+      if (e.y < 0) { e.y = 1; e.x = Math.random(); }
+      const x = e.x * canvas.width + Math.sin(S.time * 2 + e.p) * 9;
+      const y = e.y * canvas.height;
+      const a = 0.28 + Math.sin(S.time * 5 + e.p) * 0.16;
+      ctx.fillStyle = `rgba(255,${(120 + e.s * 70) | 0},40,${Math.max(0.05, a)})`;
+      ctx.fillRect(x, y, 2, 2);
     }
   }
 
@@ -650,7 +770,9 @@ const Render = (() => {
     ctx.textAlign = 'left';
     ctx.font = '16px Georgia';
     ctx.fillStyle = '#c8a24b';
-    const place = S.level.depth === 0 ? 'Town of Last Light' : `Dungeon — Depth ${S.level.depth}`;
+    const place = S.level.depth === 0
+      ? 'Town of Last Light'
+      : `${THEME_INFO[themeFor(S.level.depth)].name} — Depth ${S.level.depth}`;
     ctx.fillText(place, 18, 30);
     ctx.font = '14px Georgia';
     ctx.fillStyle = '#ffd34d';
@@ -727,16 +849,30 @@ const Render = (() => {
         // Using the bottom corner instead draws walls over characters
         // standing just in front of them.
         drawables.push({ depth: tx + ty + 1, wall: { tx, ty, light } });
+        // Sparse torches on walls that face an open floor tile below.
+        const n = tileNoise(tx, ty);
+        if (n > 0.8 && n < 0.92 && ty + 1 < h && map[(ty + 1) * w + tx] !== T.WALL) {
+          drawables.push({ depth: tx + ty + 1.01, torch: { tx, ty, light } });
+        }
       }
     }
+    for (const d of S.level.decor || []) {
+      const light = lightAt(S, Math.floor(d.x), Math.floor(d.y));
+      if (light <= 0) continue;
+      if (!onScreen(worldToScreen(d.x, d.y), TW)) continue;
+      drawables.push({ depth: d.x + d.y, decor: d, light });
+    }
     for (const e of S.enemies) {
-      if (!e.dead) drawables.push({ depth: e.x + e.y, enemy: e });
+      // Dying enemies stay in the scene briefly for their collapse frame.
+      if (!e.dead || e.deadT < 0.9) drawables.push({ depth: e.x + e.y, enemy: e });
     }
     drawables.push({ depth: S.player.x + S.player.y, player: true });
     drawables.sort((a, b) => a.depth - b.depth);
     for (const d of drawables) {
       if (d.wall) drawWallBlock(S, d.wall.tx, d.wall.ty, d.wall.light);
+      else if (d.torch) drawTorch(S, d.torch.tx, d.torch.ty, d.torch.light);
       else if (d.fountain) drawFountainObject(S, d.fountain.tx, d.fountain.ty, d.fountain.light);
+      else if (d.decor) drawDecor(S, d.decor, d.light);
       else if (d.enemy) drawEnemy(S, d.enemy);
       else drawPlayer(S);
     }
@@ -744,8 +880,13 @@ const Render = (() => {
     drawProjectiles(S);
     drawFloaters(S);
     drawAtmosphere(S);
+    drawEmbers(S);
     drawHUD(S);
   }
 
-  return { canvas, frame, screenToWorld, characterLook, TS: TW };
+  function placeName(depth) {
+    return THEME_INFO[themeFor(depth)].name;
+  }
+
+  return { canvas, frame, screenToWorld, characterLook, placeName, TS: TW };
 })();

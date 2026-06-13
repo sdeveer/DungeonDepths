@@ -52,6 +52,7 @@ const Dungeon = (() => {
       entry: { x: 11, y: 11 },
       rooms: [{ x: 2, y: 2, w: w - 4, h: h - 4 }],
       enemies: [],
+      decor: [],
     };
   }
 
@@ -118,7 +119,21 @@ const Dungeon = (() => {
       }
     }
 
-    return { w, h, map, depth, entry, rooms, enemies };
+    // Scatter decorative props on room floors (purely visual; the renderer
+    // maps `kind` to theme-specific artwork).
+    const decor = [];
+    for (const room of rooms) {
+      const count = Math.floor(rand() * 2.5);
+      for (let i = 0; i < count; i++) {
+        const dx = room.x + 1 + Math.floor(rand() * Math.max(1, room.w - 2));
+        const dy = room.y + 1 + Math.floor(rand() * Math.max(1, room.h - 2));
+        if (map[dy * w + dx] !== T.FLOOR) continue;
+        if (Math.abs(dx + 0.5 - entry.x) + Math.abs(dy + 0.5 - entry.y) < 2.5) continue;
+        decor.push({ x: dx + 0.5, y: dy + 0.5, kind: Math.floor(rand() * 3) });
+      }
+    }
+
+    return { w, h, map, depth, entry, rooms, enemies, decor };
   }
 
   const tileAt = (lvl, x, y) => {

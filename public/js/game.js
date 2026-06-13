@@ -97,9 +97,17 @@ const Game = (() => {
     };
     S.descendLock = 1.0;
 
+    // Story flavor on first entering each environment band.
+    const FLAVOR = {
+      1: 'The dead whisper beneath the town…',
+      5: 'The earth itself swallows the light…',
+      10: 'Black water seeps between the stones…',
+      15: 'The air burns. Something ancient stirs below…',
+    };
     if (depth === 0) UI.toast('The town of Last Light. Rest, then descend.', '#c8a24b');
-    else if (depth % 5 === 0) UI.toast(`Depth ${depth} — a terrible presence dwells here…`, '#ff5040');
-    else UI.toast(`Depth ${depth}`, '#a89878');
+    else UI.toast(`${Render.placeName(depth)} — Depth ${depth}`, '#a89878');
+    if (FLAVOR[depth]) UI.toast(FLAVOR[depth], '#b89fe8');
+    if (depth > 0 && depth % 5 === 0) UI.toast('A terrible presence dwells here…', '#ff5040');
   }
 
   function start(charData, items) {
@@ -176,6 +184,7 @@ const Game = (() => {
     }
     S.char.mana -= Shared.FIREBALL_COST;
     p.fireballCd = 0.6;
+    p.swing = 0.18;
     const ang = Math.atan2(wy - p.y, wx - p.x);
     p.facing = ang;
     S.projectiles.push({
@@ -195,6 +204,7 @@ const Game = (() => {
     if (S.char.hp >= S.derived.maxHp) return;
     S.char.mana -= Shared.HEAL_COST;
     p.healCd = 1.5;
+    p.swing = 0.18;
     const amount = S.derived.healAmount;
     S.char.hp = Math.min(S.derived.maxHp, S.char.hp + amount);
     addFloater(p.x, p.y - 0.6, `+${amount}`, '#5ad06a');
@@ -269,6 +279,8 @@ const Game = (() => {
       S.char.gold = r.gold;
       S.char.deaths = r.deaths;
     } catch (err) { /* show the screen regardless */ }
+    // Let the death-collapse animation play before the screen drops.
+    await new Promise((r) => setTimeout(r, 1100));
     UI.showDeath({
       level: S.char.level, depth: S.level.depth, kills: S.char.kills,
       goldLost, gold: S.char.gold,
@@ -415,6 +427,7 @@ const Game = (() => {
     e.attackCd = Math.max(0, e.attackCd - dt);
     e.volleyCd = Math.max(0, e.volleyCd - dt);
     e.flash = Math.max(0, e.flash - dt);
+    e.attackT = Math.max(0, (e.attackT || 0) - dt); // attack-pose timer
     e.repathCd -= dt;
 
     const p = S.player;
@@ -433,6 +446,7 @@ const Game = (() => {
       // Hold position and shoot.
       if (e.attackCd <= 0) {
         e.attackCd = 1.6;
+        e.attackT = 0.4;
         const ang = Math.atan2(p.y - e.y, p.x - e.x);
         S.projectiles.push({
           x: e.x, y: e.y, vx: Math.cos(ang) * 7, vy: Math.sin(ang) * 7,
@@ -456,12 +470,14 @@ const Game = (() => {
       }
     } else if (e.attackCd <= 0 && d <= e.stats.range) {
       e.attackCd = e.type === 'boss' ? 1.0 : 1.3;
+      e.attackT = 0.4;
       damagePlayer(e.stats.dmg);
     }
 
     // Boss: periodic projectile volley on top of melee.
     if (e.type === 'boss' && los && e.volleyCd <= 0) {
       e.volleyCd = 3.5;
+      e.attackT = 0.4;
       const base = Math.atan2(p.y - e.y, p.x - e.x);
       for (const off of [-0.35, 0, 0.35]) {
         S.projectiles.push({
@@ -599,7 +615,11 @@ const Game = (() => {
     const ox = S.player.x, oy = S.player.y;
     updatePlayer(dt);
     S.player.moving = Math.hypot(S.player.x - ox, S.player.y - oy) > 1e-4;
-    for (const e of S.enemies) updateEnemy(e, dt);
+    for (const e of S.enemies) {
+      const ex = e.x, ey = e.y;
+      updateEnemy(e, dt);
+      e.moving = Math.hypot(e.x - ex, e.y - ey) > 1e-4;
+    }
     separateEnemies();
     updateProjectiles(dt);
     updateTiles(dt);
