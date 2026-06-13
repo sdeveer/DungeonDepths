@@ -96,13 +96,33 @@ const Render = (() => {
     for (const n of TERRAIN_SOURCES.decor) load(n, (im) => { terrain.decor[n] = im; });
   }
 
+  // Fog state per tile: hidden, remembered, or in view. Distance falloff
+  // and flicker are handled by the smooth screen-space darkness pass, so
+  // tiles in view render at full light.
   function lightAt(S, tx, ty) {
     const i = ty * S.level.w + tx;
     if (!S.fog.discovered[i]) return 0;
-    if (!S.fog.visible[i]) return 0.13;
-    const d = Math.hypot(tx + 0.5 - S.player.x, ty + 0.5 - S.player.y);
-    const flicker = 1 + Math.sin(S.time * 9 + tx * 3 + ty * 5) * 0.04;
-    return Math.max(0.2, Math.min(1, (1.15 - d / Game.VISION_RADIUS) * flicker));
+    if (!S.fog.visible[i]) return 0.3;
+    return 1;
+  }
+
+  // Smooth torchlight: a radial darkness gradient pinned to the player,
+  // squashed to the iso plane, with a soft flame flicker.
+  function drawDarkness(S) {
+    const ps = worldToScreen(S.player.x, S.player.y);
+    const flicker = 1 + Math.sin(S.time * 9) * 0.025 + Math.sin(S.time * 23) * 0.015;
+    const R = Game.VISION_RADIUS * TW * 0.62 * flicker;
+    ctx.save();
+    ctx.translate(ps.x, ps.y - TH / 2);
+    ctx.scale(1, 0.55);
+    const g = ctx.createRadialGradient(0, 0, R * 0.25, 0, 0, R);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.55, 'rgba(0,0,0,0.18)');
+    g.addColorStop(0.8, 'rgba(2,3,8,0.55)');
+    g.addColorStop(1, 'rgba(2,3,8,0.84)');
+    ctx.fillStyle = g;
+    ctx.fillRect(-canvas.width * 2, -canvas.height * 4, canvas.width * 4, canvas.height * 8);
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------------
@@ -145,10 +165,26 @@ const Render = (() => {
       ctx.drawImage(tex, (q & 1) * half, (q >> 1) * half, half, half,
         s.x - TW / 2, s.y, TW, TH);
       ctx.restore();
-      // Lighting and fog as a darkness overlay (keeps the torch flicker).
+      // Fog overlay (smooth lighting is a separate screen-space pass).
       diamondPath(s);
       ctx.fillStyle = `rgba(4,6,12,${Math.min(0.95, 1 - light)})`;
       ctx.fill();
+      // Living ground: lava veins pulse in hell, water glints when drowned.
+      if (light > 0.5 && tile === T.FLOOR) {
+        if (theme === 'hell' && n > 0.45) {
+          ctx.globalCompositeOperation = 'lighter';
+          diamondPath(s);
+          ctx.fillStyle = `rgba(255,80,15,${0.05 + 0.05 * Math.sin(S.time * 2.2 + tx * 1.7 + ty * 2.3)})`;
+          ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        } else if (theme === 'sunken' && n > 0.6) {
+          ctx.globalCompositeOperation = 'lighter';
+          diamondPath(s);
+          ctx.fillStyle = `rgba(120,210,235,${0.03 + 0.03 * Math.sin(S.time * 1.6 + tx * 2.9 + ty * 1.3)})`;
+          ctx.fill();
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      }
     } else {
       // Procedural fallback: cold gray-blue stone with per-tile variation.
       const v = 52 + n * 18;
@@ -196,6 +232,8 @@ const Render = (() => {
   function drawPortal(S, tx, ty, light) {
     const c = worldToScreen(tx + 0.5, ty + 0.5);
     const pulse = 1 + Math.sin(S.time * 4) * 0.12;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     const g = ctx.createRadialGradient(c.x, c.y, 2, c.x, c.y, TH * 1.4 * pulse);
     g.addColorStop(0, `rgba(220,160,255,${0.95 * light})`);
     g.addColorStop(0.6, `rgba(140,60,220,${0.7 * light})`);
@@ -204,6 +242,7 @@ const Render = (() => {
     ctx.beginPath();
     ctx.ellipse(c.x, c.y, TW * 0.45 * pulse, TH * 0.7 * pulse, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
 
   function drawFountain(S, tx, ty, light) {
@@ -212,10 +251,13 @@ const Render = (() => {
       // Soft magical glow at the base; the fountain itself is a sprite
       // object drawn depth-sorted in pass 2.
       const shimmer = 0.5 + Math.sin(S.time * 3) * 0.12;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = `rgba(70,160,220,${shimmer * light * 0.5})`;
       ctx.beginPath();
       ctx.ellipse(c.x, c.y, TW * 0.4, TH * 0.4, 0, 0, Math.PI * 2);
       ctx.fill();
+      ctx.restore();
       return;
     }
     ctx.fillStyle = `rgba(70,60,50,${light})`;
@@ -270,12 +312,15 @@ const Render = (() => {
     ctx.restore();
     const flicker = 0.8 + Math.sin(S.time * 13 + tx * 5 + ty * 3) * 0.12
                   + Math.sin(S.time * 29 + tx) * 0.06;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     const g = ctx.createRadialGradient(cx, cy - ht * 0.3, 2, cx, cy - ht * 0.3, TW * 0.9 * flicker);
     g.addColorStop(0, `rgba(255,170,60,${0.32 * Math.min(1, light * 2)})`);
     g.addColorStop(0.5, `rgba(255,120,30,${0.12 * Math.min(1, light * 2)})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = g;
     ctx.fillRect(cx - TW, cy - ht * 0.3 - TW, TW * 2, TW * 2);
+    ctx.restore();
   }
 
   // Raised isometric wall block: lit top cap, two shaded front faces.
@@ -422,7 +467,7 @@ const Render = (() => {
 
   function drawEnemy(S, e) {
     const light = lightAt(S, Math.floor(e.x), Math.floor(e.y));
-    if (light < 0.2) return;
+    if (light < 0.5) return; // enemies only show in direct view, not memory
     const look = ENEMY_LOOKS[e.type];
     const r = look.size * E;
     const s = worldToScreen(e.x, e.y); // feet position
@@ -514,6 +559,8 @@ const Render = (() => {
   }
 
   function drawProjectiles(S) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     for (const pr of S.projectiles) {
       const s = worldToScreen(pr.x, pr.y);
       s.y -= E * 0.4; // projectiles fly at chest height
@@ -534,6 +581,7 @@ const Render = (() => {
       ctx.arc(s.x, s.y, r * 1.8, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
   }
 
   function drawFloaters(S) {
@@ -559,12 +607,15 @@ const Render = (() => {
     const ps = worldToScreen(S.player.x, S.player.y);
     // Warm torch glow around the player.
     const flicker = 1 + Math.sin(S.time * 11) * 0.03 + Math.sin(S.time * 23) * 0.02;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
     const glow = ctx.createRadialGradient(ps.x, ps.y, TH, ps.x, ps.y, TW * 5 * flicker);
-    glow.addColorStop(0, 'rgba(255,170,70,0.10)');
-    glow.addColorStop(0.5, 'rgba(255,130,40,0.04)');
+    glow.addColorStop(0, 'rgba(255,170,70,0.12)');
+    glow.addColorStop(0.5, 'rgba(255,130,40,0.05)');
     glow.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
 
     // Theme color grading: each environment gets its own cast.
     const tint = THEME_INFO[themeFor(S.level.depth)].tint;
@@ -597,24 +648,59 @@ const Render = (() => {
     }
   }
 
-  // Drifting embers in the Burning Depths.
-  const embers = [];
-  function drawEmbers(S) {
-    if (themeFor(S.level.depth) !== 'hell') { embers.length = 0; return; }
-    if (embers.length === 0) {
-      for (let i = 0; i < 36; i++) {
-        embers.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random(), p: Math.random() * 6 });
+  // Ambient particles per environment: rising embers in hell, drifting
+  // dust in crypts and caves, falling drips in the Drowned Halls, and
+  // wandering fireflies in town.
+  const PARTICLE_THEMES = {
+    hell:   { n: 36, mode: 'rise' },
+    crypt:  { n: 22, mode: 'dust', color: '170,180,215' },
+    cave:   { n: 22, mode: 'dust', color: '205,165,110' },
+    sunken: { n: 20, mode: 'drip' },
+    town:   { n: 16, mode: 'firefly' },
+  };
+  const particles = [];
+  let particleTheme = null;
+  function drawParticles(S) {
+    const theme = themeFor(S.level.depth);
+    const cfg = PARTICLE_THEMES[theme];
+    if (!cfg) { particles.length = 0; particleTheme = null; return; }
+    if (particleTheme !== theme) {
+      particleTheme = theme;
+      particles.length = 0;
+      for (let i = 0; i < cfg.n; i++) {
+        particles.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random(), p: Math.random() * 6.28 });
       }
     }
-    for (const e of embers) {
-      e.y -= 0.0009 * e.s;
-      if (e.y < 0) { e.y = 1; e.x = Math.random(); }
-      const x = e.x * canvas.width + Math.sin(S.time * 2 + e.p) * 9;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const e of particles) {
+      let x = e.x * canvas.width, w = 2, h = 2;
       const y = e.y * canvas.height;
-      const a = 0.28 + Math.sin(S.time * 5 + e.p) * 0.16;
-      ctx.fillStyle = `rgba(255,${(120 + e.s * 70) | 0},40,${Math.max(0.05, a)})`;
-      ctx.fillRect(x, y, 2, 2);
+      if (cfg.mode === 'rise') {
+        e.y -= 0.0009 * e.s;
+        if (e.y < 0) { e.y = 1; e.x = Math.random(); }
+        x += Math.sin(S.time * 2 + e.p) * 9;
+        const a = 0.28 + Math.sin(S.time * 5 + e.p) * 0.16;
+        ctx.fillStyle = `rgba(255,${(120 + e.s * 70) | 0},40,${Math.max(0.05, a)})`;
+      } else if (cfg.mode === 'dust') {
+        e.y += 0.00012 * e.s;
+        e.x += 0.00008 * Math.sin(S.time * 0.7 + e.p);
+        if (e.y > 1) { e.y = 0; e.x = Math.random(); }
+        const a = 0.04 + Math.abs(Math.sin(S.time * 0.9 + e.p)) * 0.07;
+        ctx.fillStyle = `rgba(${cfg.color},${a})`;
+      } else if (cfg.mode === 'drip') {
+        e.y += 0.004 * e.s;
+        if (e.y > 1) { e.y = 0; e.x = Math.random(); }
+        w = 1; h = 7;
+        ctx.fillStyle = `rgba(140,200,230,${0.1 + e.s * 0.08})`;
+      } else { // firefly
+        x += Math.sin(S.time * 0.8 + e.p) * 30;
+        const a = Math.max(0, Math.sin(S.time * 1.4 + e.p)) * 0.35;
+        ctx.fillStyle = `rgba(255,210,120,${a})`;
+      }
+      ctx.fillRect(x, y, w, h);
     }
+    ctx.restore();
   }
 
   // ---------------------------------------------------------------------
@@ -813,6 +899,12 @@ const Render = (() => {
     // Pin the player slightly above screen center (panel covers the bottom).
     cam.x = isoX(S.player.x, S.player.y) - canvas.width / 2;
     cam.y = isoY(S.player.x, S.player.y) - (canvas.height - PANEL_H) / 2;
+    // Impact shake.
+    const sh = Math.max(0, shakeEnd - S.time) / 0.3 * shakeMag;
+    if (sh > 0.05) {
+      cam.x += Math.sin(S.time * 71) * sh;
+      cam.y += Math.cos(S.time * 93) * sh * 0.7;
+    }
 
     const { w, h, map } = S.level;
 
@@ -878,15 +970,22 @@ const Render = (() => {
     }
 
     drawProjectiles(S);
+    drawDarkness(S);
     drawFloaters(S);
     drawAtmosphere(S);
-    drawEmbers(S);
+    drawParticles(S);
     drawHUD(S);
+  }
+
+  let shakeMag = 0, shakeEnd = 0;
+  function shake(mag) {
+    shakeMag = mag;
+    shakeEnd = Game.S.time + 0.3;
   }
 
   function placeName(depth) {
     return THEME_INFO[themeFor(depth)].name;
   }
 
-  return { canvas, frame, screenToWorld, characterLook, placeName, TS: TW };
+  return { canvas, frame, screenToWorld, characterLook, placeName, shake, TS: TW };
 })();

@@ -263,6 +263,7 @@ const Game = (() => {
     const dmg = Shared.mitigate(variance(rawDmg), S.derived.armor);
     S.char.hp -= dmg;
     S.player.hitFlash = 0.2;
+    Render.shake(4);
     addFloater(S.player.x, S.player.y - 0.7, `-${dmg}`, '#ff5a4a');
     if (S.char.hp <= 0) {
       S.char.hp = 0;

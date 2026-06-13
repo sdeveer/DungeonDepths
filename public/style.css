@@ -49,9 +49,18 @@ html, body {
 .center-panel { min-width: 380px; max-width: 480px; text-align: center; }
 
 .title {
-  font-size: 36px; letter-spacing: 6px; color: var(--gold);
+  font-size: 32px; letter-spacing: 4px; color: var(--gold);
+  /* letter-spacing adds trailing space after the last glyph; indent by the
+     same amount so the text stays optically centered in the panel. */
+  text-indent: 4px;
+  white-space: nowrap;
   text-shadow: 0 0 18px rgba(200,130,40,0.5), 0 2px 2px #000;
   margin-bottom: 6px;
+  animation: title-glow 4.5s ease-in-out infinite;
+}
+@keyframes title-glow {
+  0%, 100% { text-shadow: 0 0 18px rgba(200,130,40,0.5), 0 2px 2px #000; }
+  50% { text-shadow: 0 0 32px rgba(255,175,60,0.9), 0 0 60px rgba(255,120,30,0.35), 0 2px 2px #000; }
 }
 .title.small { font-size: 24px; letter-spacing: 4px; }
 .death-title { color: #c03020; text-shadow: 0 0 24px rgba(180,30,20,0.7); }
