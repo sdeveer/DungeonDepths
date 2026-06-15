@@ -53,6 +53,7 @@ const Dungeon = (() => {
       rooms: [{ x: 2, y: 2, w: w - 4, h: h - 4 }],
       enemies: [],
       decor: [],
+      traps: [],
     };
   }
 
@@ -133,7 +134,23 @@ const Dungeon = (() => {
       }
     }
 
-    return { w, h, map, depth, entry, rooms, enemies, decor };
+    // A limited number of traps, placed on open floor away from the entry.
+    // Deterministic via the same seeded rng, so a level's traps are stable.
+    const traps = [];
+    const TRAP_KINDS = ['spike', 'flame', 'gold'];
+    const trapCount = Math.min(4, 1 + Math.floor(rand() * (1 + depth / 4)));
+    for (let tries = 0; tries < 90 && traps.length < trapCount; tries++) {
+      const room = rooms[1 + Math.floor(rand() * Math.max(1, rooms.length - 1))];
+      if (!room) break;
+      const tx = room.x + 1 + Math.floor(rand() * Math.max(1, room.w - 2));
+      const ty = room.y + 1 + Math.floor(rand() * Math.max(1, room.h - 2));
+      if (map[ty * w + tx] !== T.FLOOR) continue;
+      if (Math.abs(tx + 0.5 - entry.x) + Math.abs(ty + 0.5 - entry.y) < 4) continue;
+      if (traps.some((t) => Math.abs(t.x - tx) < 1.5 && Math.abs(t.y - ty) < 1.5)) continue;
+      traps.push({ x: tx + 0.5, y: ty + 0.5, kind: TRAP_KINDS[Math.floor(rand() * TRAP_KINDS.length)], armed: true, t: 0 });
+    }
+
+    return { w, h, map, depth, entry, rooms, enemies, decor, traps };
   }
 
   const tileAt = (lvl, x, y) => {

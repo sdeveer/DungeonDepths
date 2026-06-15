@@ -29,6 +29,7 @@ const Net = (() => {
     save: (id, state) => api('POST', `/characters/${id}/save`, state),
     kill: (id, type) => api('POST', `/characters/${id}/kill`, { type }),
     death: (id) => api('POST', `/characters/${id}/death`),
+    trap: (id, type) => api('POST', `/characters/${id}/trap`, { type }),
 
     equip: (id, itemId) => api('POST', `/characters/${id}/items/${itemId}/equip`),
     unequip: (id, itemId) => api('POST', `/characters/${id}/items/${itemId}/unequip`),

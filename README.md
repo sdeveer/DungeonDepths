@@ -66,6 +66,9 @@ own attack animation. A universal **Heal** sits on **R**.
   each with its own tileset, color grading and atmosphere.
 - Enemies scale with depth and are fully animated (walk, attack, hit and
   death); every 5th depth holds a **Dungeon Lord** boss.
+- A handful of **traps** lurk on each floor — runed pressure plates that
+  spring iron spikes or erupt in flame (damage), and cursed runes that
+  drain gold from your purse. Watch your step.
 - Loot has four rarity tiers — common (white), magic (blue), rare (yellow),
   legendary (orange) — with randomized stats.
 - The **🎲 Random Hero** button on the character select screen generates a

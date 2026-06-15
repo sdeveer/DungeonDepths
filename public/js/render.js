@@ -75,9 +75,11 @@ const Render = (() => {
     stairs: 'stairs',
     stairsDown: 'stairs-down',
     fountain: 'fountain',
+    trapPlate: 'trap-plate',
+    trapSpikes: 'trap-spikes',
     decor: ['torch', 'sarcophagus', 'bones', 'pillar', 'stalagmite', 'rubble', 'statue', 'skulls'],
   };
-  const terrain = { themes: {}, cobbles: [], stairs: null, stairsDown: null, fountain: null, decor: {} };
+  const terrain = { themes: {}, cobbles: [], stairs: null, stairsDown: null, fountain: null, trapPlate: null, trapSpikes: null, decor: {} };
   {
     const load = (name, cb) => {
       const im = new Image();
@@ -95,6 +97,8 @@ const Render = (() => {
     load(TERRAIN_SOURCES.stairs, (im) => { terrain.stairs = im; });
     load(TERRAIN_SOURCES.stairsDown, (im) => { terrain.stairsDown = im; });
     load(TERRAIN_SOURCES.fountain, (im) => { terrain.fountain = im; });
+    load(TERRAIN_SOURCES.trapPlate, (im) => { terrain.trapPlate = im; });
+    load(TERRAIN_SOURCES.trapSpikes, (im) => { terrain.trapSpikes = im; });
     for (const n of TERRAIN_SOURCES.decor) load(n, (im) => { terrain.decor[n] = im; });
   }
 
@@ -330,6 +334,50 @@ const Render = (() => {
       ctx.lineTo(c.x + 11, cy);
       ctx.stroke();
     }
+    ctx.restore();
+  }
+
+  // An armed trap's pressure plate, clipped flat into its tile with a faint
+  // pulsing warning glow (gold-tinted for the cursed gold trap).
+  function drawTrapPlate(S, tr, light) {
+    const img = terrain.trapPlate;
+    if (!img) return;
+    const s = worldToScreen(Math.floor(tr.x), Math.floor(tr.y));
+    ctx.save();
+    diamondPath(s);
+    ctx.clip();
+    ctx.imageSmoothingEnabled = false;
+    ctx.globalAlpha = Math.min(1, light + 0.1);
+    ctx.drawImage(img, s.x - TW / 2, s.y, TW, TH);
+    ctx.restore();
+    // Warning shimmer in the runes.
+    const c = worldToScreen(tr.x, tr.y);
+    const pulse = 0.4 + Math.abs(Math.sin(S.time * 3)) * 0.5;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const col = tr.kind === 'gold' ? '255,200,80' : '255,70,40';
+    const g = ctx.createRadialGradient(c.x, c.y, 1, c.x, c.y, TW * 0.5);
+    g.addColorStop(0, `rgba(${col},${0.22 * pulse * Math.min(1, light + 0.2)})`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, TW * 0.5, TH * 0.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // Sprung iron spikes, drawn as a depth-sorted object after a spike trap fires.
+  function drawTrapSpikes(S, tr, light) {
+    const img = terrain.trapSpikes;
+    if (!img) return;
+    const c = worldToScreen(tr.x, tr.y);
+    const pop = Math.min(1, tr.t / 0.12); // quick jab up
+    const ht = TH * 1.7 * pop;
+    const wd = ht * (img.width / img.height);
+    ctx.save();
+    ctx.globalAlpha = Math.min(1, light + 0.1);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, c.x - wd / 2, c.y + TH * 0.25 - ht, wd, ht);
     ctx.restore();
   }
 
@@ -687,6 +735,32 @@ const Render = (() => {
         ctx.beginPath();
         ctx.ellipse(c.x, c.y - TH * 0.7, rad, rad * 0.6, 0, 0, Math.PI * 2);
         ctx.fill();
+      } else if (fx.kind === 'firetrap') {
+        // A column of fire bursting up from the floor.
+        const h = TH * 3 * (0.3 + k * 0.7);
+        const wd = (fx.radius || 1.5) * TW * 0.5 * (1 - k * 0.3);
+        const g = ctx.createLinearGradient(c.x, c.y, c.x, c.y - h);
+        g.addColorStop(0, `rgba(255,230,150,${(1 - k) * 0.9})`);
+        g.addColorStop(0.5, `rgba(255,130,30,${(1 - k) * 0.7})`);
+        g.addColorStop(1, 'rgba(120,20,0,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y - h / 2, wd, h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (fx.kind === 'curse') {
+        // Cursed gold sparkle swirling up from the rune.
+        const rad = (fx.radius || 1.4) * (TW / 2) * (0.3 + k);
+        ctx.strokeStyle = `rgba(255,205,90,${(1 - k) * 0.8})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, rad, rad * 0.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        for (let i = 0; i < 6; i++) {
+          const a = S.time * 4 + i * 1.05;
+          const rr = rad * (0.4 + 0.5 * ((k + i / 6) % 1));
+          ctx.fillStyle = `rgba(255,220,120,${(1 - k) * 0.8})`;
+          ctx.fillRect(c.x + Math.cos(a) * rr - 1, c.y + Math.sin(a) * rr * 0.5 - TH * k - 1, 2, 2);
+        }
       }
     }
     ctx.restore();
@@ -1042,6 +1116,16 @@ const Render = (() => {
     }
     for (const e of S.enemies) if (e.dead) drawCorpse(S, e);
 
+    // Armed trap plates lie flat on the floor (sprung spikes are objects,
+    // depth-sorted with entities in pass 2).
+    for (const tr of S.level.traps || []) {
+      if (!tr.armed) continue;
+      const light = lightAt(S, Math.floor(tr.x), Math.floor(tr.y));
+      if (light <= 0) continue;
+      if (!onScreen(worldToScreen(tr.x, tr.y), TW)) continue;
+      drawTrapPlate(S, tr, light);
+    }
+
     // Pass 2: wall blocks and living entities, depth-sorted so walls
     // correctly occlude whatever stands behind them.
     const drawables = [];
@@ -1080,6 +1164,13 @@ const Render = (() => {
       if (!onScreen(worldToScreen(d.x, d.y), TW)) continue;
       drawables.push({ depth: d.x + d.y, decor: d, light });
     }
+    for (const tr of S.level.traps || []) {
+      if (!(tr.sprung && tr.kind === 'spike')) continue;
+      const light = lightAt(S, Math.floor(tr.x), Math.floor(tr.y));
+      if (light <= 0) continue;
+      if (!onScreen(worldToScreen(tr.x, tr.y), TW)) continue;
+      drawables.push({ depth: tr.x + tr.y, spikes: tr, light });
+    }
     for (const e of S.enemies) {
       // Dying enemies stay in the scene briefly for their collapse frame.
       if (!e.dead || e.deadT < 0.9) drawables.push({ depth: e.x + e.y, enemy: e });
@@ -1091,6 +1182,7 @@ const Render = (() => {
       else if (d.torch) drawTorch(S, d.torch.tx, d.torch.ty, d.torch.light);
       else if (d.fountain) drawFountainObject(S, d.fountain.tx, d.fountain.ty, d.fountain.light);
       else if (d.stairs) drawStairsObject(S, d.stairs.tx, d.stairs.ty, d.stairs.light);
+      else if (d.spikes) drawTrapSpikes(S, d.spikes, d.light);
       else if (d.decor) drawDecor(S, d.decor, d.light);
       else if (d.enemy) drawEnemy(S, d.enemy);
       else drawPlayer(S);

@@ -727,6 +727,47 @@ const Game = (() => {
     if (tr.t >= tr.dur) S.transition = null;
   }
 
+  // Traps: fire when the player steps onto an armed one. Damage is
+  // client-simulated (persisted via the normal hp save); gold theft goes
+  // through the server, which decides the amount.
+  function updateTraps(dt) {
+    const p = S.player;
+    for (const tr of S.level.traps || []) {
+      if (tr.sprung) tr.t += dt;
+      if (!tr.armed) continue;
+      if (Math.hypot(tr.x - p.x, tr.y - p.y) > 0.55) continue;
+      tr.armed = false; tr.sprung = true; tr.t = 0;
+      triggerTrap(tr);
+    }
+  }
+
+  function triggerTrap(tr) {
+    const depth = Math.max(1, S.level.depth);
+    if (tr.kind === 'spike') {
+      damagePlayer(8 + depth * 2.5);
+      UI.toast('A spike trap springs!', '#d8584a');
+    } else if (tr.kind === 'flame') {
+      addEffect('firetrap', tr.x, tr.y, { dur: 0.6, radius: 1.7 });
+      damagePlayer(14 + depth * 4);
+      UI.toast('Flames erupt from the floor!', '#ff8030');
+    } else if (tr.kind === 'gold') {
+      addEffect('curse', tr.x, tr.y, { dur: 0.6, radius: 1.4 });
+      damagePlayer(4 + depth * 1.5);
+      stealGold();
+    }
+  }
+
+  async function stealGold() {
+    try {
+      const r = await Net.trap(S.char.id, 'gold');
+      if (r && r.goldLost > 0) {
+        S.char.gold = r.gold;
+        addFloater(S.player.x, S.player.y - 0.6, `-${r.goldLost} gold`, '#ffd34d');
+        UI.toast('A cursed rune drains your purse!', '#c8a24b');
+      }
+    } catch (err) { /* offline: no gold change applied */ }
+  }
+
   function updateTiles(dt) {
     S.descendLock = Math.max(0, S.descendLock - dt);
     S.fountainCooldown = Math.max(0, S.fountainCooldown - dt);
@@ -816,6 +857,7 @@ const Game = (() => {
     separateEnemies();
     updateProjectiles(dt);
     updateScheduled(dt);
+    updateTraps(dt);
     updateTiles(dt);
     updateFog();
     updateFloaters(dt);

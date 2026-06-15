@@ -231,6 +231,32 @@ router.post('/characters/:id/death', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// Traps: a gold-thief trap. The client reports triggering it; the server
+// decides the loss from its own record of depth/gold (never trusting the
+// client), rate-limited so the endpoint can't be spammed.
+
+const trapCooldowns = new Map();
+router.post('/characters/:id/trap', async (req, res, next) => {
+  try {
+    const char = await loadCharacter(req, res);
+    if (!char) return;
+    const now = Date.now();
+    const last = trapCooldowns.get(char.id) || 0;
+    if (now - last < 400) return res.json({ goldLost: 0, gold: char.gold });
+    trapCooldowns.set(char.id, now);
+
+    const depth = Math.max(1, char.depth);
+    const maxLoss = 5 + depth * 3;
+    const goldLost = Math.min(char.gold, Math.floor(maxLoss * (0.5 + Math.random() * 0.5)));
+    if (goldLost > 0) {
+      await db.query('UPDATE characters SET gold=gold-$1, updated_at=now() WHERE id=$2',
+        [goldLost, char.id]);
+    }
+    res.json({ goldLost, gold: char.gold - goldLost });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
 // Inventory
 
 async function loadItem(req, res, char) {
