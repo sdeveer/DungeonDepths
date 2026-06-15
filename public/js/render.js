@@ -520,6 +520,23 @@ const Render = (() => {
     zombie:   { body: '#5a7a45', head: '#739158', eye: '#d8e860', size: 0.36 },
     demon:    { body: '#7a2520', head: '#963028', eye: '#ffd040', size: 0.36, horns: true },
     boss:     { body: '#581815', head: '#7a201a', eye: '#ff3820', size: 0.62, horns: true },
+    // Catacombs
+    ghoul:    { body: '#8a8a70', head: '#a6a688', eye: '#b0ff80', size: 0.34 },
+    archer:   { body: '#cfc8b8', head: '#e8e0d0', eye: '#80e0ff', size: 0.33 },
+    wraith:   { body: '#3a3a55', head: '#5a5a7a', eye: '#9fd8ff', size: 0.34 },
+    // Hollow Caves
+    spider:   { body: '#26242c', head: '#3a3640', eye: '#ff4040', size: 0.34 },
+    goblin:   { body: '#5f8a3f', head: '#76a050', eye: '#ffe060', size: 0.30 },
+    bat:      { body: '#3a2e3a', head: '#4a3a4a', eye: '#ffd040', size: 0.28, horns: true },
+    troll:    { body: '#6a7a55', head: '#7e8e66', eye: '#ffd040', size: 0.52 },
+    // Drowned Halls
+    drowned:  { body: '#3f6a60', head: '#4f7a6e', eye: '#a0ffd0', size: 0.38 },
+    lurker:   { body: '#2f6a72', head: '#3f8a8a', eye: '#d8ff60', size: 0.36, horns: true },
+    slime:    { body: '#4faa6a', head: '#6fc888', eye: '#e8ffa0', size: 0.34 },
+    // Burning Depths
+    imp:      { body: '#a83020', head: '#c44030', eye: '#ffd040', size: 0.28, horns: true },
+    hellhound:{ body: '#2a1a18', head: '#46201a', eye: '#ff7020', size: 0.34, horns: true },
+    brute:    { body: '#7a2018', head: '#992820', eye: '#ff5020', size: 0.56, horns: true },
   };
 
   // Per-character generated appearance, derived from the character's seed so
@@ -665,6 +682,8 @@ const Render = (() => {
       bolt:      ['rgba(235,245,255,1)', 'rgba(110,180,255,0.9)', 'rgba(30,80,220,0)', 8],
       knife:     ['rgba(245,245,250,1)', 'rgba(180,190,205,0.85)', 'rgba(80,90,110,0)', 5],
       shadowbolt:['rgba(220,180,255,1)', 'rgba(140,40,200,0.8)', 'rgba(60,0,100,0)', 7],
+      arrow:     ['rgba(245,235,200,1)', 'rgba(190,160,90,0.85)', 'rgba(90,70,30,0)', 5],
+      firebolt:  ['rgba(255,235,160,1)', 'rgba(255,110,30,0.9)', 'rgba(180,30,0,0)', 7],
     };
     for (const pr of S.projectiles) {
       const s = worldToScreen(pr.x, pr.y);

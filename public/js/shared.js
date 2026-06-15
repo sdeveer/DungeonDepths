@@ -71,10 +71,28 @@
   const HEAL_COST = 14;
 
   const ENEMIES = {
+    // Originals
     skeleton: { hp: 22,  dmg: 5,  xp: 9,   speed: 3.4, range: 1.3, label: 'Skeleton' },
     zombie:   { hp: 42,  dmg: 8,  xp: 12,  speed: 1.7, range: 1.3, label: 'Zombie' },
-    demon:    { hp: 30,  dmg: 7,  xp: 16,  speed: 2.6, range: 6.0, label: 'Demon' },
+    demon:    { hp: 30,  dmg: 7,  xp: 16,  speed: 2.6, range: 6.0, label: 'Demon', ranged: true, projectile: 'shadowbolt' },
     boss:     { hp: 260, dmg: 14, xp: 130, speed: 2.4, range: 1.7, label: 'Dungeon Lord' },
+    // The Catacombs
+    ghoul:    { hp: 28,  dmg: 6,  xp: 11,  speed: 3.9, range: 1.3, label: 'Ghoul' },
+    archer:   { hp: 20,  dmg: 6,  xp: 13,  speed: 2.6, range: 7.0, label: 'Skeleton Archer', ranged: true, projectile: 'arrow' },
+    wraith:   { hp: 18,  dmg: 7,  xp: 14,  speed: 4.3, range: 1.4, label: 'Wraith' },
+    // The Hollow Caves
+    spider:   { hp: 24,  dmg: 5,  xp: 12,  speed: 4.7, range: 1.2, label: 'Cave Spider' },
+    goblin:   { hp: 34,  dmg: 7,  xp: 13,  speed: 3.1, range: 1.3, label: 'Goblin' },
+    bat:      { hp: 14,  dmg: 4,  xp: 10,  speed: 5.0, range: 1.2, label: 'Giant Bat' },
+    troll:    { hp: 75,  dmg: 12, xp: 24,  speed: 1.6, range: 1.6, label: 'Cave Troll' },
+    // The Drowned Halls
+    drowned:  { hp: 62,  dmg: 10, xp: 21,  speed: 1.5, range: 1.3, label: 'Drowned Dead' },
+    lurker:   { hp: 40,  dmg: 9,  xp: 18,  speed: 2.9, range: 1.4, label: 'Deep Lurker' },
+    slime:    { hp: 52,  dmg: 6,  xp: 15,  speed: 1.3, range: 1.2, label: 'Ooze' },
+    // The Burning Depths
+    imp:      { hp: 22,  dmg: 8,  xp: 17,  speed: 3.0, range: 6.0, label: 'Imp', ranged: true, projectile: 'firebolt' },
+    hellhound:{ hp: 32,  dmg: 10, xp: 19,  speed: 5.0, range: 1.3, label: 'Hellhound' },
+    brute:    { hp: 95,  dmg: 16, xp: 30,  speed: 1.8, range: 1.7, label: 'Demon Brute' },
   };
 
   // Difficulty scaling with dungeon depth.

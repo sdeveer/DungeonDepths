@@ -307,11 +307,22 @@ const Sprites = (() => {
     // Death collapse exists as a single (front) frame per class.
     SPRITE_SOURCES[cls].front.death = `img/sprites/${cls}-death.png`;
   }
+  // Originals have a walk frame too; the new roster uses idle/attack/death.
   for (const enemy of ['skeleton', 'zombie', 'demon', 'boss']) {
     SPRITE_SOURCES[enemy] = {
       front: {
         idle: `img/sprites/${enemy}.png`,
         walk: `img/sprites/${enemy}-walk.png`,
+        attack: `img/sprites/${enemy}-attack.png`,
+        death: `img/sprites/${enemy}-death.png`,
+      },
+    };
+  }
+  for (const enemy of ['ghoul', 'archer', 'wraith', 'spider', 'goblin', 'bat',
+    'troll', 'drowned', 'lurker', 'slime', 'imp', 'hellhound', 'brute']) {
+    SPRITE_SOURCES[enemy] = {
+      front: {
+        idle: `img/sprites/${enemy}.png`,
         attack: `img/sprites/${enemy}-attack.png`,
         death: `img/sprites/${enemy}-death.png`,
       },

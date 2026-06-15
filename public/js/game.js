@@ -591,10 +591,10 @@ const Game = (() => {
       else return;
     }
 
-    const isRanged = e.type === 'demon';
-    const wantRange = isRanged ? 5.0 : e.stats.range * 0.9;
+    const isRanged = !!e.stats.ranged;
+    const wantRange = isRanged ? Math.min(5.0, e.stats.range - 1) : e.stats.range * 0.9;
 
-    if (isRanged && los && d <= 6.5) {
+    if (isRanged && los && d <= e.stats.range + 0.5) {
       // Hold position and shoot.
       if (e.attackCd <= 0) {
         e.attackCd = 1.6;
@@ -602,7 +602,7 @@ const Game = (() => {
         const ang = Math.atan2(p.y - e.y, p.x - e.x);
         S.projectiles.push({
           x: e.x, y: e.y, vx: Math.cos(ang) * 7, vy: Math.sin(ang) * 7,
-          dmg: e.stats.dmg, friendly: false, life: 3, kind: 'shadowbolt',
+          dmg: e.stats.dmg, friendly: false, life: 3, kind: e.stats.projectile || 'shadowbolt',
         });
       }
       e.facing = Math.atan2(p.y - e.y, p.x - e.x);

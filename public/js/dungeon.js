@@ -96,6 +96,15 @@ const Dungeon = (() => {
     const stairs = center(farthest);
     map[stairs.y * w + stairs.x] = T.STAIRS;
 
+    // Enemy roster by depth band, matching the environment theme.
+    const types =
+      depth < 5  ? ['skeleton', 'skeleton', 'zombie', 'ghoul', 'archer', 'wraith'] :
+      depth < 10 ? ['spider', 'goblin', 'bat', 'troll', 'wraith', 'archer'] :
+      depth < 15 ? ['drowned', 'lurker', 'slime', 'troll', 'drowned'] :
+                   ['demon', 'imp', 'hellhound', 'brute', 'hellhound'];
+    // Themed minions flanking the boss.
+    const minion = depth < 5 ? 'skeleton' : depth < 10 ? 'goblin' : depth < 15 ? 'lurker' : 'hellhound';
+
     // Populate enemies (never in the entry room).
     const isBossLevel = depth % 5 === 0;
     const enemies = [];
@@ -106,12 +115,11 @@ const Dungeon = (() => {
         const c = center(farthest);
         enemies.push({ type: 'boss', x: c.x + 0.5, y: c.y - 1.5 });
         // Boss minions.
-        enemies.push({ type: 'skeleton', x: c.x - 1.5, y: c.y + 0.5 });
-        enemies.push({ type: 'skeleton', x: c.x + 2.5, y: c.y + 0.5 });
+        enemies.push({ type: minion, x: c.x - 1.5, y: c.y + 0.5 });
+        enemies.push({ type: minion, x: c.x + 2.5, y: c.y + 0.5 });
         continue;
       }
       const count = 1 + Math.floor(rand() * (2 + Math.min(3, depth / 3)));
-      const types = ['skeleton', 'skeleton', 'zombie', 'demon'];
       for (let i = 0; i < count; i++) {
         const ex = room.x + 0.5 + Math.floor(rand() * room.w);
         const ey = room.y + 0.5 + Math.floor(rand() * room.h);

@@ -70,8 +70,12 @@ skills stay locked. Choices persist server-side per character.
 - The depths run through four themed environments — **The Catacombs**,
   **The Hollow Caves**, **The Drowned Halls** and **The Burning Depths** —
   each with its own tileset, color grading and atmosphere.
-- Enemies scale with depth and are fully animated (walk, attack, hit and
-  death); every 5th depth holds a **Dungeon Lord** boss.
+- A bestiary of **16 enemy types** drawn from each band — skeletons,
+  ghouls, skeleton archers and wraiths in the Catacombs; spiders, goblins,
+  bats and trolls in the Caves; the drowned, deep lurkers and oozes in the
+  Drowned Halls; demons, imps, hellhounds and brutes in the Burning Depths.
+  Some attack at range (archers, imps, demons). All scale with depth and are
+  animated (attack, hit, death); every 5th depth holds a **Dungeon Lord** boss.
 - A handful of **traps** lurk on each floor — runed pressure plates that
   spring iron spikes or erupt in flame (damage), and cursed runes that
   drain gold from your purse. Watch your step.
