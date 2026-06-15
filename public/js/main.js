@@ -45,6 +45,7 @@
   async function showCharSelect() {
     Game.stop();
     UI.hideInventory();
+    UI.hideSkillTree();
     hide('#screen-menu');
     hide('#screen-death');
     show('#screen-chars');
@@ -217,6 +218,9 @@
       case 'r': Game.castHeal(); break;
       case 'i':
         UI.toggleInventory();
+        break;
+      case 'k':
+        UI.toggleSkillTree();
         break;
       case 'escape':
         if (Game.S.deathPending) break;

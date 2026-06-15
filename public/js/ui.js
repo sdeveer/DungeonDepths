@@ -3,7 +3,20 @@ const UI = (() => {
   const $ = (sel) => document.querySelector(sel);
 
   const invPanel = $('#inv-panel');
+  const skillPanel = $('#skill-panel');
   const tooltip = $('#tooltip');
+
+  const SKILL_DESC = {
+    cleave: 'A wide forward swing striking all foes in an arc.',
+    whirl: 'Spin to strike every enemy around you.',
+    leap: 'Leap to the cursor and crash down, damaging all nearby.',
+    fireball: 'Hurl a bolt of flame that bursts on impact.',
+    frost: 'A frozen blast that damages and chills nearby foes.',
+    bolt: 'A bolt of lightning that pierces every enemy in a line.',
+    fan: 'Throw a spread of daggers in a fan.',
+    dash: 'Blink forward, cutting every enemy in your path.',
+    flurry: 'A rapid storm of dagger strikes on a target.',
+  };
 
   const KIND_ICONS = { weapon: '🗡️', armor: '🛡️', potion: '🧪' };
   const STAT_LABELS = {
@@ -105,6 +118,7 @@ const UI = (() => {
 
   function toggleInventory() {
     invPanel.classList.toggle('hidden');
+    if (!invPanel.classList.contains('hidden')) hideSkillTree();
     hideTooltip();
     refreshInventory();
   }
@@ -129,5 +143,78 @@ const UI = (() => {
 
   function hideDeath() { $('#screen-death').classList.add('hidden'); }
 
-  return { toast, refreshInventory, toggleInventory, hideInventory, showDeath, hideDeath };
+  // ---------------------------------------------------------------------
+  // Skill tree
+
+  function rankPips(rank, max) {
+    let s = '';
+    for (let i = 0; i < max; i++) s += i < rank ? '◆' : '◇';
+    return s;
+  }
+
+  function refreshSkillTree() {
+    if (!skillPanel || skillPanel.classList.contains('hidden')) return;
+    const S = Game.S;
+    if (!S.char) return;
+    const cls = S.char.class;
+    const skills = Shared.SKILLS[cls] || [];
+    const owned = S.char.skills || {};
+    const avail = Shared.skillPointsAvailable(S.char.level, owned);
+    const base = S.derived ? (cls === 'mage' ? S.derived.fireballDmg : S.derived.meleeDmg) : 0;
+
+    $('#skill-points').innerHTML =
+      `Skill points: <b class="${avail > 0 ? 'pts-have' : ''}">${avail}</b>`;
+
+    const list = $('#skill-list');
+    list.innerHTML = '';
+    for (const sk of skills) {
+      const rank = owned[sk.id] || 0;
+      const maxed = rank >= Shared.SKILL_MAX_RANK;
+      const row = document.createElement('div');
+      row.className = 'skill-row' + (rank === 0 ? ' locked' : '');
+
+      const icon = document.createElement('div');
+      icon.className = 'skill-icon';
+      icon.style.backgroundImage = `url(img/sprites/${cls}-front-${sk.pose}.png)`;
+      row.appendChild(icon);
+
+      const dmg = Math.round(base * Shared.skillMult(sk, Math.max(1, rank)));
+      const info = document.createElement('div');
+      info.className = 'skill-info';
+      info.innerHTML =
+        `<div class="skill-name">${sk.icon} ${sk.name}` +
+        `<span class="skill-key">${sk.key}</span></div>` +
+        `<div class="skill-pips">${rankPips(rank, Shared.SKILL_MAX_RANK)}` +
+        `<span class="skill-num"> ${rank}/${Shared.SKILL_MAX_RANK}</span></div>` +
+        `<div class="skill-meta">~${dmg} dmg · ${sk.cost} mana · ${sk.cd}s</div>` +
+        `<div class="skill-desc">${SKILL_DESC[sk.id] || ''}</div>`;
+      row.appendChild(info);
+
+      const btn = document.createElement('button');
+      btn.className = 'skill-plus';
+      btn.textContent = maxed ? 'MAX' : (rank === 0 ? 'Learn' : '+');
+      btn.disabled = maxed || avail <= 0;
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        await Game.learnSkill(sk.id);
+        refreshSkillTree();
+      });
+      row.appendChild(btn);
+      list.appendChild(row);
+    }
+  }
+
+  function toggleSkillTree() {
+    if (!skillPanel) return;
+    skillPanel.classList.toggle('hidden');
+    if (!skillPanel.classList.contains('hidden')) hideInventory();
+    refreshSkillTree();
+  }
+
+  function hideSkillTree() { if (skillPanel) skillPanel.classList.add('hidden'); }
+
+  return {
+    toast, refreshInventory, toggleInventory, hideInventory, showDeath, hideDeath,
+    refreshSkillTree, toggleSkillTree, hideSkillTree,
+  };
 })();

@@ -124,9 +124,30 @@
     ],
   };
 
+  // Skill tree: each class skill can be ranked 1..SKILL_MAX_RANK by spending
+  // points earned on level-up (one per level). A skill at rank 0 is unlearned
+  // and cannot be cast. Higher ranks scale a skill's damage.
+  const SKILL_MAX_RANK = 5;
+
+  // Damage multiplier for a skill at a given rank (rank 1 = base, +30%/rank).
+  function skillMult(skill, rank) {
+    return skill.mult * (1 + 0.3 * Math.max(0, rank - 1));
+  }
+  // Total points earned by a level (1 per level; level 1 starts with one).
+  function skillPointsTotal(level) { return level; }
+  function skillPointsSpent(skills) {
+    let s = 0;
+    for (const k in (skills || {})) s += skills[k];
+    return s;
+  }
+  function skillPointsAvailable(level, skills) {
+    return Math.max(0, skillPointsTotal(level) - skillPointsSpent(skills));
+  }
+
   return {
-    CLASSES, ENEMIES, RARITY, SKILLS,
+    CLASSES, ENEMIES, RARITY, SKILLS, SKILL_MAX_RANK,
     FIREBALL_COST, HEAL_COST,
     xpForLevel, baseAttributes, derive, enemyStats, mitigate,
+    skillMult, skillPointsTotal, skillPointsSpent, skillPointsAvailable,
   };
 });

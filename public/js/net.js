@@ -30,6 +30,7 @@ const Net = (() => {
     kill: (id, type) => api('POST', `/characters/${id}/kill`, { type }),
     death: (id) => api('POST', `/characters/${id}/death`),
     trap: (id, type) => api('POST', `/characters/${id}/trap`, { type }),
+    learnSkill: (id, skillId) => api('POST', `/characters/${id}/skill`, { id: skillId }),
 
     equip: (id, itemId) => api('POST', `/characters/${id}/items/${itemId}/equip`),
     unequip: (id, itemId) => api('POST', `/characters/${id}/items/${itemId}/unequip`),

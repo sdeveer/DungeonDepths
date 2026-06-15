@@ -38,6 +38,7 @@ won't lose progress (only `docker compose down -v` will).
 | Left click / hold | Move (click an enemy to attack it) |
 | Q / W / E | Class skills, cast toward the cursor (cost mana) |
 | R | Heal (costs mana) |
+| K | Toggle skill tree |
 | I | Toggle inventory |
 | Shift + click item | Destroy item |
 | Esc | Pause menu (save & exit) |
@@ -46,6 +47,11 @@ won't lose progress (only `docker compose down -v` will).
 
 Three classes, each with three signature battle skills — every skill has its
 own attack animation. A universal **Heal** sits on **R**.
+
+Skills are unlocked and strengthened through a **skill tree** (**K**): every
+level grants a point to spend, and each skill ranks up to 5 for more damage
+(and, at milestones, extra projectiles, wider areas or more hits). Unlearned
+skills stay locked. Choices persist server-side per character.
 
 | Class | Q | W | E |
 | --- | --- | --- | --- |

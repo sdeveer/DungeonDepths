@@ -41,5 +41,9 @@ CREATE TABLE IF NOT EXISTS items (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Skill-tree ranks per character: { "<skillId>": rank, ... }. Added here
+-- (idempotent) so existing databases pick it up on the next boot.
+ALTER TABLE characters ADD COLUMN IF NOT EXISTS skills JSONB NOT NULL DEFAULT '{}';
+
 CREATE INDEX IF NOT EXISTS idx_characters_account ON characters(account_id);
 CREATE INDEX IF NOT EXISTS idx_items_character ON items(character_id);

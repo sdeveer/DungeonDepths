@@ -1019,14 +1019,25 @@ const Render = (() => {
     ctx.fillStyle = '#b0a288';
     ctx.fillText(`Level ${S.char.level}  ·  ${S.char.xp} / ${S.char.xpNext} XP`, W / 2, by - 4);
 
+    // Unspent skill points: a pulsing prompt above the XP bar.
+    const points = Shared.skillPointsAvailable(S.char.level, S.char.skills || {});
+    if (points > 0) {
+      const a = 0.6 + Math.abs(Math.sin(S.time * 3)) * 0.4;
+      ctx.font = 'bold 12px Georgia';
+      ctx.fillStyle = `rgba(159,216,255,${a})`;
+      ctx.fillText(`✦ ${points} skill point${points > 1 ? 's' : ''} — press K`, W / 2, by - 20);
+    }
+
     // Ability bar: basic attack, three class skills (Q/W/E), and heal (R).
     const p = S.player;
     const skills = Shared.SKILLS[S.char.class] || [];
+    const owned = S.char.skills || {};
     const slots = [{ key: 'LMB', icon: '⚔️', ready: true, cd: 0 }];
     for (const sk of skills) {
+      const rank = owned[sk.id] || 0;
       slots.push({
-        key: sk.key, icon: sk.icon,
-        ready: S.char.mana >= sk.cost && (p.skillCd[sk.id] || 0) <= 0,
+        key: sk.key, icon: sk.icon, rank, locked: rank < 1,
+        ready: rank >= 1 && S.char.mana >= sk.cost && (p.skillCd[sk.id] || 0) <= 0,
         cd: (p.skillCd[sk.id] || 0) / sk.cd,
       });
     }
@@ -1038,6 +1049,25 @@ const Render = (() => {
     const ay = H - PANEL_H / 2 - size / 2 - 4;
     for (const s of slots) {
       drawAbilityButton(sx, ay, size, s.key, s.ready, s.cd, s.icon);
+      if (s.locked) {
+        // Unlearned skill: darken and mark with a lock.
+        ctx.fillStyle = 'rgba(8,6,4,0.55)';
+        ctx.fillRect(sx, ay, size, size);
+        ctx.font = '16px Georgia';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(200,180,150,0.8)';
+        ctx.fillText('🔒', sx + size / 2, ay + size / 2 + 6);
+      } else if (s.rank !== undefined) {
+        // Rank pips along the bottom edge.
+        const n = Shared.SKILL_MAX_RANK, pw = 6, pg = 2;
+        const tw = n * pw + (n - 1) * pg;
+        let px = sx + (size - tw) / 2;
+        for (let i = 0; i < n; i++) {
+          ctx.fillStyle = i < s.rank ? '#ffd34d' : 'rgba(0,0,0,0.55)';
+          ctx.fillRect(px, ay + size - 5, pw, 3);
+          px += pw + pg;
+        }
+      }
       sx += size + gap;
     }
 
@@ -1045,7 +1075,7 @@ const Render = (() => {
     ctx.font = '11px Georgia';
     ctx.fillStyle = 'rgba(140,125,100,0.65)';
     const names = skills.map((sk) => `${sk.key} ${sk.name}`).join(' · ');
-    ctx.fillText(`Click: move/attack · ${names} · R Heal · I Inventory · Esc Menu`, W / 2, H - 6);
+    ctx.fillText(`Click: move/attack · ${names} · R Heal · K Skills · I Inventory · Esc Menu`, W / 2, H - 6);
 
     // Top-left: location, gold, hero.
     ctx.textAlign = 'left';

@@ -48,6 +48,8 @@ function publicChar(char) {
     depth: char.depth, maxDepth: char.max_depth,
     posX: char.pos_x, posY: char.pos_y, seed: char.seed,
     deaths: char.deaths, kills: char.kills,
+    skills: char.skills || {},
+    skillPoints: Shared.skillPointsAvailable(char.level, char.skills || {}),
   };
 }
 
@@ -227,6 +229,34 @@ router.post('/characters/:id/death', async (req, res, next) => {
       [goldLost, derived.maxHp, derived.maxMana, char.id]
     );
     res.json({ goldLost, gold: char.gold - goldLost, deaths: char.deaths + 1 });
+  } catch (err) { next(err); }
+});
+
+// ---------------------------------------------------------------------------
+// Skill tree: spend a level-up point to rank up a class skill. The server is
+// authoritative for available points (level minus ranks already bought).
+
+router.post('/characters/:id/skill', async (req, res, next) => {
+  try {
+    const char = await loadCharacter(req, res);
+    if (!char) return;
+    const { id } = req.body || {};
+    const list = Shared.SKILLS[char.class] || [];
+    if (!list.some((s) => s.id === id)) {
+      return res.status(400).json({ error: 'unknown skill for this class' });
+    }
+    const skills = char.skills || {};
+    const rank = skills[id] || 0;
+    if (rank >= Shared.SKILL_MAX_RANK) {
+      return res.status(400).json({ error: 'skill already at max rank' });
+    }
+    if (Shared.skillPointsAvailable(char.level, skills) <= 0) {
+      return res.status(400).json({ error: 'no skill points available' });
+    }
+    skills[id] = rank + 1;
+    await db.query('UPDATE characters SET skills=$1, updated_at=now() WHERE id=$2',
+      [JSON.stringify(skills), char.id]);
+    res.json({ skills, skillPoints: Shared.skillPointsAvailable(char.level, skills) });
   } catch (err) { next(err); }
 });
 

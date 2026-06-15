@@ -119,6 +119,7 @@ const Game = (() => {
 
   function start(charData, items) {
     S.char = charData;
+    S.char.skills = S.char.skills || {};
     S.items = items;
     recomputeDerived();
     S.char.hp = Math.max(1, Math.min(S.char.hp, S.derived.maxHp));
@@ -236,6 +237,8 @@ const Game = (() => {
     const list = Shared.SKILLS[S.char.class];
     const sk = list && list[idx];
     if (!sk) return;
+    const rank = (S.char.skills && S.char.skills[sk.id]) || 0;
+    if (rank < 1) { UI.toast(`${sk.name} not learned — press K to spend a skill point`, '#c8a24b'); return; }
     if ((p.skillCd[sk.id] || 0) > 0) return;
     if (S.char.mana < sk.cost) { UI.toast('Not enough mana', '#7a8ccf'); return; }
 
@@ -246,8 +249,13 @@ const Game = (() => {
     p.facing = ang;
 
     const base = (S.char.class === 'mage' ? S.derived.fireballDmg : S.derived.meleeDmg);
-    const roll = () => variance(Math.round(base * sk.mult));
+    const dmg = base * Shared.skillMult(sk, rank);
+    const roll = () => variance(Math.round(dmg));
     const dirx = Math.cos(ang), diry = Math.sin(ang);
+    // Higher ranks widen/multiply a few skills, not just their damage.
+    const radius = (sk.radius || 0) + 0.12 * (rank - 1);
+    const count = (sk.count || 0) + (rank >= 3 ? 1 : 0) + (rank >= 5 ? 1 : 0);
+    const hits = (sk.hits || 0) + (rank >= 4 ? 1 : 0);
 
     if (sk.kind === 'arc') {
       // Forward melee cleave: enemies in range and within the facing arc.
@@ -261,19 +269,19 @@ const Game = (() => {
       addEffect('cleave', p.x, p.y, { ang, range: sk.range, dur: 0.3 });
 
     } else if (sk.kind === 'nova') {
-      for (const e of enemiesInRadius(p.x, p.y, sk.radius)) {
+      for (const e of enemiesInRadius(p.x, p.y, radius)) {
         damageEnemy(e, roll());
         if (sk.slow) e.slowUntil = S.time + sk.slow;
       }
-      addEffect(sk.id === 'frost' ? 'frost' : 'nova', p.x, p.y, { radius: sk.radius, dur: 0.5 });
+      addEffect(sk.id === 'frost' ? 'frost' : 'nova', p.x, p.y, { radius, dur: 0.5 });
       Render.shake(3);
 
     } else if (sk.kind === 'leap') {
       const land = clampReach(p, dirx, diry, sk.reach);
       addEffect('dashline', p.x, p.y, { x2: land.x, y2: land.y, dur: 0.18, color: '180,200,230' });
       p.x = land.x; p.y = land.y; p.path = null; p.target = null;
-      for (const e of enemiesInRadius(p.x, p.y, sk.radius)) damageEnemy(e, roll());
-      addEffect('slam', p.x, p.y, { radius: sk.radius, dur: 0.45 });
+      for (const e of enemiesInRadius(p.x, p.y, radius)) damageEnemy(e, roll());
+      addEffect('slam', p.x, p.y, { radius, dur: 0.45 });
       Render.shake(6);
 
     } else if (sk.kind === 'dash') {
@@ -289,18 +297,18 @@ const Game = (() => {
 
     } else if (sk.kind === 'projectile') {
       S.projectiles.push({ x: p.x, y: p.y, vx: dirx * sk.speed, vy: diry * sk.speed,
-        dmg: Math.round(base * sk.mult), friendly: true, life: 2.5, kind: 'fireball' });
+        dmg: Math.round(dmg), friendly: true, life: 2.5, kind: 'fireball' });
 
     } else if (sk.kind === 'pierce') {
       S.projectiles.push({ x: p.x, y: p.y, vx: dirx * sk.speed, vy: diry * sk.speed,
-        dmg: Math.round(base * sk.mult), friendly: true, life: 1.6, kind: 'bolt', pierce: true });
+        dmg: Math.round(dmg), friendly: true, life: 1.6, kind: 'bolt', pierce: true });
 
     } else if (sk.kind === 'spread') {
-      for (let i = 0; i < sk.count; i++) {
-        const off = sk.spread * (i / (sk.count - 1) - 0.5);
+      for (let i = 0; i < count; i++) {
+        const off = sk.spread * (count > 1 ? i / (count - 1) - 0.5 : 0);
         const a = ang + off;
         S.projectiles.push({ x: p.x, y: p.y, vx: Math.cos(a) * sk.speed, vy: Math.sin(a) * sk.speed,
-          dmg: Math.round(base * sk.mult), friendly: true, life: 1.4, kind: 'knife' });
+          dmg: Math.round(dmg), friendly: true, life: 1.4, kind: 'knife' });
       }
 
     } else if (sk.kind === 'flurry') {
@@ -316,7 +324,7 @@ const Game = (() => {
       }
       if (tgt) {
         p.target = tgt;
-        for (let i = 0; i < sk.hits; i++) {
+        for (let i = 0; i < hits; i++) {
           S.scheduled.push({ t: i * 0.07, done: false, fn: () => {
             if (!tgt.dead) { damageEnemy(tgt, roll()); addEffect('slash', tgt.x, tgt.y, { dur: 0.18 }); }
           } });
@@ -380,6 +388,8 @@ const Game = (() => {
         S.char.mana = S.derived.maxMana;
         addFloater(S.player.x, S.player.y - 1.2, 'LEVEL UP!', '#ffd34d', true);
         UI.toast(`You are now level ${r.level}!`, '#ffd34d');
+        UI.toast('A skill point earned — press K to develop a skill.', '#9fd8ff');
+        UI.refreshSkillTree();
       }
       for (const item of r.items || []) {
         S.items.push(item);
@@ -757,6 +767,21 @@ const Game = (() => {
     }
   }
 
+  // Spend a level-up point to rank up a skill (server-authoritative).
+  async function learnSkill(skillId) {
+    try {
+      const r = await Net.learnSkill(S.char.id, skillId);
+      if (r && r.skills) {
+        S.char.skills = r.skills;
+        UI.refreshSkillTree();
+      }
+      return r;
+    } catch (err) {
+      UI.toast(err.message, '#d8584a');
+      return null;
+    }
+  }
+
   async function stealGold() {
     try {
       const r = await Net.trap(S.char.id, 'gold');
@@ -873,7 +898,7 @@ const Game = (() => {
 
   return {
     S, start, stop, update, save, saveState,
-    commandMove, castFireball, castHeal, castSkill, respawn,
+    commandMove, castFireball, castHeal, castSkill, learnSkill, respawn,
     equipItem, destroyItem, recomputeDerived,
     VISION_RADIUS,
   };
