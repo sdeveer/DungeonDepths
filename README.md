@@ -9,7 +9,11 @@ persisted to PostgreSQL.
 
 Everything is rendered with plain HTML5 Canvas and vanilla JavaScript in a
 Diablo II-style isometric view (2:1 diamond tiles, raised wall blocks,
-depth-sorted occlusion) — no frameworks, no image assets.
+depth-sorted occlusion) — no frameworks. All of the art — heroes, enemies,
+terrain, decor and key art — is pixel art generated with a local
+ComfyUI / Stable Diffusion pipeline, with smooth torchlight, bloom and
+ambient particles layered on top. Procedural canvas drawing remains as a
+built-in fallback if the image assets are missing.
 
 ## Quick start
 
@@ -32,20 +36,36 @@ won't lose progress (only `docker compose down -v` will).
 | Input | Action |
 | --- | --- |
 | Left click / hold | Move (click an enemy to attack it) |
-| Q | Fireball toward the cursor (costs mana) |
-| W | Heal (costs mana) |
+| Q / W / E | Class skills, cast toward the cursor (cost mana) |
+| R | Heal (costs mana) |
 | I | Toggle inventory |
 | Shift + click item | Destroy item |
 | Esc | Pause menu (save & exit) |
+
+## Classes & skills
+
+Three classes, each with three signature battle skills — every skill has its
+own attack animation. A universal **Heal** sits on **R**.
+
+| Class | Q | W | E |
+| --- | --- | --- | --- |
+| **Warrior** | Cleave — wide forward-arc swing | Whirlwind — radial spin AoE | Leap Slam — leap to the cursor, AoE on landing |
+| **Mage** | Fireball — bolt with splash | Frost Nova — AoE burst that chills | Chain Bolt — pierces every enemy in a line |
+| **Rogue** | Fan of Knives — spread of blades | Shadow Dash — blink through enemies | Blade Flurry — rapid multi-hit |
 
 ## How it plays
 
 - You start in the **Town of Last Light**: a fountain fully restores you,
   stairs lead to depth 1, and a purple portal jumps straight to the deepest
   level you've reached.
-- Dungeons are procedurally generated (rooms + corridors) and shrouded in fog
-  of war with a torch-glow vision radius. Find the stairs to descend.
-- Enemies scale with depth; every 5th depth holds a **Dungeon Lord** boss.
+- Dungeons are procedurally generated (rooms + corridors), scattered with
+  decor and torches, and shrouded in fog of war with a torch-glow vision
+  radius. Find the stairs to descend.
+- The depths run through four themed environments — **The Catacombs**,
+  **The Hollow Caves**, **The Drowned Halls** and **The Burning Depths** —
+  each with its own tileset, color grading and atmosphere.
+- Enemies scale with depth and are fully animated (walk, attack, hit and
+  death); every 5th depth holds a **Dungeon Lord** boss.
 - Loot has four rarity tiers — common (white), magic (blue), rare (yellow),
   legendary (orange) — with randomized stats.
 - The **🎲 Random Hero** button on the character select screen generates a
