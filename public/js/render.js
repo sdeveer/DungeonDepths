@@ -73,10 +73,11 @@ const Render = (() => {
     },
     cobbles: ['cobble-a', 'cobble-b'],
     stairs: 'stairs',
+    stairsDown: 'stairs-down',
     fountain: 'fountain',
     decor: ['torch', 'sarcophagus', 'bones', 'pillar', 'stalagmite', 'rubble', 'statue', 'skulls'],
   };
-  const terrain = { themes: {}, cobbles: [], stairs: null, fountain: null, decor: {} };
+  const terrain = { themes: {}, cobbles: [], stairs: null, stairsDown: null, fountain: null, decor: {} };
   {
     const load = (name, cb) => {
       const im = new Image();
@@ -92,6 +93,7 @@ const Render = (() => {
     }
     TERRAIN_SOURCES.cobbles.forEach((n, i) => load(n, (im) => { terrain.cobbles[i] = im; }));
     load(TERRAIN_SOURCES.stairs, (im) => { terrain.stairs = im; });
+    load(TERRAIN_SOURCES.stairsDown, (im) => { terrain.stairsDown = im; });
     load(TERRAIN_SOURCES.fountain, (im) => { terrain.fountain = im; });
     for (const n of TERRAIN_SOURCES.decor) load(n, (im) => { terrain.decor[n] = im; });
   }
@@ -280,6 +282,54 @@ const Render = (() => {
     ctx.globalAlpha = Math.min(1, light + 0.1);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, c.x - wd / 2, c.y + TH / 2 - ht, wd, ht);
+    ctx.restore();
+  }
+
+  // The descent to the next level: the staircase sprite plus a pulsing
+  // beacon and animated chevrons so the exit reads clearly from across a room.
+  function drawStairsObject(S, tx, ty, light) {
+    const c = worldToScreen(tx + 0.5, ty + 0.5);
+    const lit = Math.min(1, light + 0.2);
+
+    // Rising glow beacon from the stairwell.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const pulse = 0.7 + Math.sin(S.time * 3) * 0.3;
+    const g = ctx.createRadialGradient(c.x, c.y - TH, 2, c.x, c.y - TH, TW * 1.15 * pulse);
+    g.addColorStop(0, `rgba(150,200,255,${0.34 * lit})`);
+    g.addColorStop(0.5, `rgba(90,150,255,${0.13 * lit})`);
+    g.addColorStop(1, 'rgba(20,40,120,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(c.x - TW * 1.3, c.y - TH * 3.2, TW * 2.6, TH * 5);
+    ctx.restore();
+
+    // The staircase sprite.
+    const img = terrain.stairsDown;
+    if (img) {
+      const ht = TH * 2.9;
+      const wd = ht * (img.width / img.height);
+      ctx.save();
+      ctx.globalAlpha = lit;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, c.x - wd / 2, c.y + TH * 0.45 - ht, wd, ht);
+      ctx.restore();
+    }
+
+    // Chevrons spawning above and drifting down into the stairwell.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.strokeStyle = '#a8d4ff';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      const phase = (S.time * 1.4 + i * 0.34) % 1;
+      const cy = c.y - TH * 2.5 + phase * TH * 1.3;
+      ctx.globalAlpha = lit * (1 - phase) * 0.9;
+      ctx.beginPath();
+      ctx.moveTo(c.x - 11, cy);
+      ctx.lineTo(c.x, cy + 8);
+      ctx.lineTo(c.x + 11, cy);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
@@ -999,12 +1049,17 @@ const Render = (() => {
       for (let tx = 0; tx < w; tx++) {
         const tile = map[ty * w + tx];
         const isFountainObj = tile === T.FOUNTAIN && terrain.fountain;
-        if (tile !== T.WALL && !isFountainObj) continue;
+        const isStairsObj = tile === T.STAIRS && terrain.stairsDown;
+        if (tile !== T.WALL && !isFountainObj && !isStairsObj) continue;
         const light = lightAt(S, tx, ty);
         if (light <= 0) continue;
         if (!onScreen(worldToScreen(tx, ty), TW + WALL_H)) continue;
         if (isFountainObj) {
           drawables.push({ depth: tx + ty + 1, fountain: { tx, ty, light } });
+          continue;
+        }
+        if (isStairsObj) {
+          drawables.push({ depth: tx + ty + 1, stairs: { tx, ty, light } });
           continue;
         }
         // Sort walls by their tile center: an entity standing in front of
@@ -1035,6 +1090,7 @@ const Render = (() => {
       if (d.wall) drawWallBlock(S, d.wall.tx, d.wall.ty, d.wall.light);
       else if (d.torch) drawTorch(S, d.torch.tx, d.torch.ty, d.torch.light);
       else if (d.fountain) drawFountainObject(S, d.fountain.tx, d.fountain.ty, d.fountain.light);
+      else if (d.stairs) drawStairsObject(S, d.stairs.tx, d.stairs.ty, d.stairs.light);
       else if (d.decor) drawDecor(S, d.decor, d.light);
       else if (d.enemy) drawEnemy(S, d.enemy);
       else drawPlayer(S);
@@ -1046,7 +1102,62 @@ const Render = (() => {
     drawFloaters(S);
     drawAtmosphere(S);
     drawParticles(S);
+    drawTransition(S);
     drawHUD(S);
+  }
+
+  // Level-change animation: a swirling vortex fades to black at the midpoint
+  // (when the level swaps), then opens back up, with the destination named.
+  function drawTransition(S) {
+    const tr = S.transition;
+    if (!tr) return;
+    const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
+    // Closing (out) ramps 0->1 by the swap midpoint; opening (in) 1->0 after.
+    const cover = tr.t < tr.mid
+      ? (tr.t / tr.mid)
+      : 1 - (tr.t - tr.mid) / (tr.dur - tr.mid);
+    const k = Math.max(0, Math.min(1, cover));
+
+    // Swirling energy ring that tightens as it closes.
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const tone = tr.kind === 'portal' ? [200, 130, 255] : [120, 180, 255];
+    const spin = S.time * 3;
+    const maxR = Math.hypot(W, H) * 0.6;
+    for (let i = 0; i < 5; i++) {
+      const rr = maxR * (1 - k) * (0.4 + i * 0.16) + 24;
+      const a = k * 0.5 * (1 - i / 6);
+      ctx.strokeStyle = `rgba(${tone[0]},${tone[1]},${tone[2]},${a})`;
+      ctx.lineWidth = 6 + i * 2;
+      ctx.beginPath();
+      for (let s = 0; s <= 1; s += 0.05) {
+        const ang = spin + i * 0.6 + s * Math.PI * 2;
+        const r = rr * (0.6 + 0.4 * s);
+        const x = cx + Math.cos(ang) * r, y = cy + Math.sin(ang) * r * 0.62;
+        s === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    // Darkness closing in from the edges (radial).
+    const g = ctx.createRadialGradient(cx, cy, maxR * (1 - k) * 0.5, cx, cy, maxR);
+    g.addColorStop(0, `rgba(2,3,8,${k * 0.2})`);
+    g.addColorStop(0.6, `rgba(2,3,8,${k})`);
+    g.addColorStop(1, `rgba(2,3,8,${Math.min(1, k + 0.2)})`);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // Destination label, brightest at the darkest point.
+    const label = tr.target === 0 ? 'Town of Last Light'
+      : `${placeName(tr.target)} — Depth ${tr.target}`;
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 26px Georgia';
+    ctx.fillStyle = `rgba(232,220,192,${k})`;
+    ctx.shadowColor = '#000'; ctx.shadowBlur = 8;
+    ctx.fillText(label, cx, cy);
+    ctx.shadowBlur = 0;
   }
 
   let shakeMag = 0, shakeEnd = 0;

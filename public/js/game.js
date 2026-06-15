@@ -23,6 +23,7 @@ const Game = (() => {
     saveTimer: 0,
     fountainCooldown: 0,
     descendLock: 0,    // avoid re-triggering stairs while standing on them
+    transition: null,  // active level-change animation
   };
 
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
@@ -154,7 +155,7 @@ const Game = (() => {
   // Player actions
 
   function commandMove(wx, wy) {
-    if (!S.running || S.paused || S.deathPending) return;
+    if (!S.running || S.paused || S.deathPending || S.transition) return;
     // Clicking an enemy targets it.
     let best = null, bestD = 0.8;
     for (const e of S.enemies) {
@@ -182,7 +183,7 @@ const Game = (() => {
 
   function castFireball(wx, wy) {
     const p = S.player;
-    if (!S.running || S.paused || S.deathPending) return;
+    if (!S.running || S.paused || S.deathPending || S.transition) return;
     if (p.fireballCd > 0) return;
     if (S.char.mana < Shared.FIREBALL_COST) {
       UI.toast('Not enough mana', '#7a8ccf');
@@ -201,7 +202,7 @@ const Game = (() => {
 
   function castHeal() {
     const p = S.player;
-    if (!S.running || S.paused || S.deathPending) return;
+    if (!S.running || S.paused || S.deathPending || S.transition) return;
     if (p.healCd > 0) return;
     if (S.char.mana < Shared.HEAL_COST) {
       UI.toast('Not enough mana', '#7a8ccf');
@@ -231,7 +232,7 @@ const Game = (() => {
 
   function castSkill(idx, wx, wy) {
     const p = S.player;
-    if (!S.running || S.paused || S.deathPending) return;
+    if (!S.running || S.paused || S.deathPending || S.transition) return;
     const list = Shared.SKILLS[S.char.class];
     const sk = list && list[idx];
     if (!sk) return;
@@ -705,21 +706,40 @@ const Game = (() => {
     S.projectiles = S.projectiles.filter((pr) => pr.life > 0);
   }
 
+  // Level-change animation: freeze the world, play a swirl/fade, swap the
+  // level at the darkest midpoint, then fade back in.
+  function beginTransition(targetDepth, kind) {
+    if (S.transition) return;
+    S.descendLock = 1.0;
+    S.player.path = null;
+    S.player.target = null;
+    S.transition = { t: 0, dur: 1.25, mid: 0.62, target: targetDepth, kind, swapped: false };
+  }
+
+  function updateTransition(dt) {
+    const tr = S.transition;
+    tr.t += dt;
+    if (!tr.swapped && tr.t >= tr.mid) {
+      tr.swapped = true;
+      enterDepth(tr.target);
+      save();
+    }
+    if (tr.t >= tr.dur) S.transition = null;
+  }
+
   function updateTiles(dt) {
     S.descendLock = Math.max(0, S.descendLock - dt);
     S.fountainCooldown = Math.max(0, S.fountainCooldown - dt);
     const tile = Dungeon.tileAt(S.level, S.player.x, S.player.y);
 
     if (tile === T.STAIRS && S.descendLock <= 0) {
-      enterDepth(S.level.depth + 1);
-      save();
+      beginTransition(S.level.depth + 1, 'descend');
       return;
     }
     if (tile === T.PORTAL && S.descendLock <= 0) {
       const target = Math.max(1, S.char.maxDepth);
       UI.toast(`The portal pulls you to depth ${target}…`, '#b878ff');
-      enterDepth(target);
-      save();
+      beginTransition(target, 'portal');
       return;
     }
     // Fountain heals when standing nearby (town only).
@@ -781,6 +801,9 @@ const Game = (() => {
   function update(dt) {
     if (!S.running || S.paused || S.deathPending) return;
     S.time += dt;
+
+    // During a level transition the world freezes; only the overlay animates.
+    if (S.transition) { updateTransition(dt); return; }
 
     const ox = S.player.x, oy = S.player.y;
     updatePlayer(dt);
