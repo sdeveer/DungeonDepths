@@ -201,18 +201,20 @@
     }
   }, 180);
 
+  // Cast the class skill in slot `idx` (Q/W/E) toward the cursor.
+  function castSkillAt(idx) {
+    const w = Render.screenToWorld(lastMouse.x, lastMouse.y);
+    Game.castSkill(idx, w.x, w.y);
+  }
+
   window.addEventListener('keydown', (ev) => {
     if (!Game.S.running) return;
     if (ev.target.tagName === 'INPUT') return;
     switch (ev.key.toLowerCase()) {
-      case 'q': {
-        const w = Render.screenToWorld(lastMouse.x, lastMouse.y);
-        Game.castFireball(w.x, w.y);
-        break;
-      }
-      case 'w':
-        Game.castHeal();
-        break;
+      case 'q': castSkillAt(0); break;
+      case 'w': castSkillAt(1); break;
+      case 'e': castSkillAt(2); break;
+      case 'r': Game.castHeal(); break;
       case 'i':
         UI.toggleInventory();
         break;

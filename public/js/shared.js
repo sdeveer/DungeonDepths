@@ -102,8 +102,30 @@
     legendary: { color: '#ff9a3d', mult: 1.8 },
   };
 
+  // Battle skills per class. Three active skills each (keys Q/W/E); a
+  // universal Heal sits on R. `kind` selects the mechanic in game.js, `mult`
+  // scales the relevant base damage (fireballDmg for the mage, meleeDmg
+  // otherwise). Used by both the client (cast logic, HUD) — single source.
+  const SKILLS = {
+    warrior: [
+      { id: 'cleave', key: 'Q', name: 'Cleave',     icon: '🪓', cost: 5,  cd: 1.0, pose: 'cleave', kind: 'arc',        mult: 1.4, range: 2.4, arc: 1.3 },
+      { id: 'whirl',  key: 'W', name: 'Whirlwind',  icon: '🌀', cost: 12, cd: 3.2, pose: 'whirl',  kind: 'nova',       mult: 1.0, radius: 2.7 },
+      { id: 'leap',   key: 'E', name: 'Leap Slam',  icon: '⬇️', cost: 14, cd: 5.0, pose: 'leap',   kind: 'leap',       mult: 1.7, radius: 2.3, reach: 5 },
+    ],
+    mage: [
+      { id: 'fireball', key: 'Q', name: 'Fireball',   icon: '🔥', cost: 10, cd: 0.6, pose: 'cast',  kind: 'projectile', mult: 1.0,  speed: 11 },
+      { id: 'frost',    key: 'W', name: 'Frost Nova', icon: '❄️', cost: 16, cd: 4.0, pose: 'frost', kind: 'nova',       mult: 0.85, radius: 3.3, slow: 2.5 },
+      { id: 'bolt',     key: 'E', name: 'Chain Bolt', icon: '⚡', cost: 14, cd: 1.5, pose: 'bolt',  kind: 'pierce',     mult: 0.95, speed: 17 },
+    ],
+    rogue: [
+      { id: 'fan',    key: 'Q', name: 'Fan of Knives', icon: '🔪', cost: 7,  cd: 0.9, pose: 'fan',    kind: 'spread', mult: 0.7,  speed: 12, count: 5, spread: 0.95 },
+      { id: 'dash',   key: 'W', name: 'Shadow Dash',   icon: '💨', cost: 11, cd: 2.4, pose: 'dash',   kind: 'dash',   mult: 1.3,  reach: 5, width: 1.2 },
+      { id: 'flurry', key: 'E', name: 'Blade Flurry',  icon: '🗡', cost: 9,  cd: 1.8, pose: 'flurry', kind: 'flurry', mult: 0.55, hits: 5, range: 2.0 },
+    ],
+  };
+
   return {
-    CLASSES, ENEMIES, RARITY,
+    CLASSES, ENEMIES, RARITY, SKILLS,
     FIREBALL_COST, HEAL_COST,
     xpForLevel, baseAttributes, derive, enemyStats, mitigate,
   };

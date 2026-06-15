@@ -17,6 +17,8 @@ const Game = (() => {
     enemies: [],
     projectiles: [],
     floaters: [],      // floating damage numbers / texts
+    effects: [],       // transient skill visuals (novas, slams, trails)
+    scheduled: [],     // delayed callbacks (multi-hit skills)
     time: 0,
     saveTimer: 0,
     fountainCooldown: 0,
@@ -93,8 +95,12 @@ const Game = (() => {
     S.player = {
       x: px, y: py, facing: 0,
       path: null, moveTarget: null, target: null,
-      attackCd: 0, fireballCd: 0, healCd: 0, hitFlash: 0, swing: 0,
+      attackCd: 0, fireballCd: 0, healCd: 0, hitFlash: 0,
+      swing: 0, swingMax: 0.18, skillPose: null, skillCd: {},
     };
+    S.projectiles = [];
+    S.effects = [];
+    S.scheduled = [];
     S.descendLock = 1.0;
 
     // Story flavor on first entering each environment band.
@@ -184,7 +190,7 @@ const Game = (() => {
     }
     S.char.mana -= Shared.FIREBALL_COST;
     p.fireballCd = 0.6;
-    p.swing = 0.18;
+    p.swing = 0.22; p.swingMax = 0.22; p.skillPose = 'cast';
     const ang = Math.atan2(wy - p.y, wx - p.x);
     p.facing = ang;
     S.projectiles.push({
@@ -204,10 +210,138 @@ const Game = (() => {
     if (S.char.hp >= S.derived.maxHp) return;
     S.char.mana -= Shared.HEAL_COST;
     p.healCd = 1.5;
-    p.swing = 0.18;
+    p.swing = 0.18; p.swingMax = 0.18; p.skillPose = null;
     const amount = S.derived.healAmount;
     S.char.hp = Math.min(S.derived.maxHp, S.char.hp + amount);
     addFloater(p.x, p.y - 0.6, `+${amount}`, '#5ad06a');
+    addEffect('heal', p.x, p.y, { dur: 0.7 });
+  }
+
+  // -------------------------------------------------------------------------
+  // Battle skills
+
+  function addEffect(kind, x, y, opts = {}) {
+    S.effects.push({ kind, x, y, t: 0, dur: opts.dur || 0.4, ...opts });
+  }
+
+  // Enemies within `radius` tiles of (x, y).
+  function enemiesInRadius(x, y, radius) {
+    return S.enemies.filter((e) => !e.dead && Math.hypot(e.x - x, e.y - y) <= radius);
+  }
+
+  function castSkill(idx, wx, wy) {
+    const p = S.player;
+    if (!S.running || S.paused || S.deathPending) return;
+    const list = Shared.SKILLS[S.char.class];
+    const sk = list && list[idx];
+    if (!sk) return;
+    if ((p.skillCd[sk.id] || 0) > 0) return;
+    if (S.char.mana < sk.cost) { UI.toast('Not enough mana', '#7a8ccf'); return; }
+
+    S.char.mana -= sk.cost;
+    p.skillCd[sk.id] = sk.cd;
+    p.swing = 0.32; p.swingMax = 0.32; p.skillPose = sk.pose;
+    const ang = Math.atan2(wy - p.y, wx - p.x);
+    p.facing = ang;
+
+    const base = (S.char.class === 'mage' ? S.derived.fireballDmg : S.derived.meleeDmg);
+    const roll = () => variance(Math.round(base * sk.mult));
+    const dirx = Math.cos(ang), diry = Math.sin(ang);
+
+    if (sk.kind === 'arc') {
+      // Forward melee cleave: enemies in range and within the facing arc.
+      for (const e of S.enemies) {
+        if (e.dead) continue;
+        const ex = e.x - p.x, ey = e.y - p.y;
+        const d = Math.hypot(ex, ey);
+        if (d > sk.range || d < 0.01) continue;
+        if (Math.acos((ex * dirx + ey * diry) / d) <= sk.arc) damageEnemy(e, roll());
+      }
+      addEffect('cleave', p.x, p.y, { ang, range: sk.range, dur: 0.3 });
+
+    } else if (sk.kind === 'nova') {
+      for (const e of enemiesInRadius(p.x, p.y, sk.radius)) {
+        damageEnemy(e, roll());
+        if (sk.slow) e.slowUntil = S.time + sk.slow;
+      }
+      addEffect(sk.id === 'frost' ? 'frost' : 'nova', p.x, p.y, { radius: sk.radius, dur: 0.5 });
+      Render.shake(3);
+
+    } else if (sk.kind === 'leap') {
+      const land = clampReach(p, dirx, diry, sk.reach);
+      addEffect('dashline', p.x, p.y, { x2: land.x, y2: land.y, dur: 0.18, color: '180,200,230' });
+      p.x = land.x; p.y = land.y; p.path = null; p.target = null;
+      for (const e of enemiesInRadius(p.x, p.y, sk.radius)) damageEnemy(e, roll());
+      addEffect('slam', p.x, p.y, { radius: sk.radius, dur: 0.45 });
+      Render.shake(6);
+
+    } else if (sk.kind === 'dash') {
+      const land = clampReach(p, dirx, diry, sk.reach);
+      const sx = p.x, sy = p.y;
+      // Damage every enemy within `width` of the dash segment.
+      for (const e of S.enemies) {
+        if (e.dead) continue;
+        if (pointSegDist(e.x, e.y, sx, sy, land.x, land.y) <= sk.width) damageEnemy(e, roll());
+      }
+      addEffect('dashline', sx, sy, { x2: land.x, y2: land.y, dur: 0.25, color: '40,20,60' });
+      p.x = land.x; p.y = land.y; p.path = null; p.target = null;
+
+    } else if (sk.kind === 'projectile') {
+      S.projectiles.push({ x: p.x, y: p.y, vx: dirx * sk.speed, vy: diry * sk.speed,
+        dmg: Math.round(base * sk.mult), friendly: true, life: 2.5, kind: 'fireball' });
+
+    } else if (sk.kind === 'pierce') {
+      S.projectiles.push({ x: p.x, y: p.y, vx: dirx * sk.speed, vy: diry * sk.speed,
+        dmg: Math.round(base * sk.mult), friendly: true, life: 1.6, kind: 'bolt', pierce: true });
+
+    } else if (sk.kind === 'spread') {
+      for (let i = 0; i < sk.count; i++) {
+        const off = sk.spread * (i / (sk.count - 1) - 0.5);
+        const a = ang + off;
+        S.projectiles.push({ x: p.x, y: p.y, vx: Math.cos(a) * sk.speed, vy: Math.sin(a) * sk.speed,
+          dmg: Math.round(base * sk.mult), friendly: true, life: 1.4, kind: 'knife' });
+      }
+
+    } else if (sk.kind === 'flurry') {
+      // A burst of rapid strikes on the nearest enemy in front.
+      let tgt = p.target && !p.target.dead ? p.target : null;
+      if (!tgt) {
+        let bestD = sk.range;
+        for (const e of S.enemies) {
+          if (e.dead) continue;
+          const d = dist(p, e);
+          if (d < bestD) { bestD = d; tgt = e; }
+        }
+      }
+      if (tgt) {
+        p.target = tgt;
+        for (let i = 0; i < sk.hits; i++) {
+          S.scheduled.push({ t: i * 0.07, done: false, fn: () => {
+            if (!tgt.dead) { damageEnemy(tgt, roll()); addEffect('slash', tgt.x, tgt.y, { dur: 0.18 }); }
+          } });
+        }
+      }
+    }
+  }
+
+  // Farthest walkable point up to `reach` tiles along (dx,dy) from the player.
+  function clampReach(p, dx, dy, reach) {
+    let best = { x: p.x, y: p.y };
+    for (let d = 0.5; d <= reach; d += 0.5) {
+      const nx = p.x + dx * d, ny = p.y + dy * d;
+      if (!Dungeon.boxWalkable(S.level, nx, ny, PLAYER_RADIUS)) break;
+      best = { x: nx, y: ny };
+    }
+    return best;
+  }
+
+  // Distance from point (px,py) to segment (ax,ay)-(bx,by).
+  function pointSegDist(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy || 1e-6;
+    let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
   }
 
   // -------------------------------------------------------------------------
@@ -391,6 +525,8 @@ const Game = (() => {
     p.healCd = Math.max(0, p.healCd - dt);
     p.hitFlash = Math.max(0, p.hitFlash - dt);
     p.swing = Math.max(0, p.swing - dt);
+    if (p.swing <= 0) p.skillPose = null;
+    for (const id in p.skillCd) if (p.skillCd[id] > 0) p.skillCd[id] = Math.max(0, p.skillCd[id] - dt);
 
     // Regen.
     S.char.hp = Math.min(S.derived.maxHp, S.char.hp + S.derived.hpRegen * dt);
@@ -406,7 +542,7 @@ const Game = (() => {
           p.facing = Math.atan2(p.target.y - p.y, p.target.x - p.x);
           if (p.attackCd <= 0) {
             p.attackCd = 1 / S.derived.attackSpeed;
-            p.swing = 0.18;
+            p.swing = 0.18; p.swingMax = 0.18; p.skillPose = null;
             damageEnemy(p.target, variance(S.derived.meleeDmg));
           }
         } else {
@@ -430,6 +566,10 @@ const Game = (() => {
     e.flash = Math.max(0, e.flash - dt);
     e.attackT = Math.max(0, (e.attackT || 0) - dt); // attack-pose timer
     e.repathCd -= dt;
+
+    // Chilled enemies (Frost Nova) crawl at 40% speed.
+    e.slowed = e.slowUntil && e.slowUntil > S.time;
+    const spd = e.slowed ? e.stats.speed * 0.4 : e.stats.speed;
 
     const p = S.player;
     const d = dist(e, p);
@@ -455,19 +595,19 @@ const Game = (() => {
         });
       }
       e.facing = Math.atan2(p.y - e.y, p.x - e.x);
-      if (d < 2.2) steerToward(e, e.x - (p.x - e.x), e.y - (p.y - e.y), e.stats.speed * 0.7, dt, enemyRadius(e));
+      if (d < 2.2) steerToward(e, e.x - (p.x - e.x), e.y - (p.y - e.y), spd * 0.7, dt, enemyRadius(e));
       return;
     }
 
     if (d > wantRange) {
       if (los) {
-        steerToward(e, p.x, p.y, e.stats.speed, dt, enemyRadius(e));
+        steerToward(e, p.x, p.y, spd, dt, enemyRadius(e));
       } else {
         if (!e.path || e.path.length === 0 || e.repathCd <= 0) {
           e.path = Dungeon.findPath(S.level, e.x, e.y, p.x, p.y);
           e.repathCd = 0.7;
         }
-        moveAlongPath(e, e.path, e.stats.speed, dt, enemyRadius(e));
+        moveAlongPath(e, e.path, spd, dt, enemyRadius(e));
       }
     } else if (e.attackCd <= 0 && d <= e.stats.range) {
       e.attackCd = e.type === 'boss' ? 1.0 : 1.3;
@@ -493,14 +633,30 @@ const Game = (() => {
   // Returns true if the projectile hit a target at its current position.
   function projectileHit(pr) {
     if (pr.friendly) {
+      // Piercing bolts pass through, damaging each enemy once.
+      if (pr.pierce) {
+        for (const e of S.enemies) {
+          if (e.dead) continue;
+          if (Math.hypot(e.x - pr.x, e.y - pr.y) < 0.6) {
+            if (!pr.hitSet) pr.hitSet = new Set();
+            if (!pr.hitSet.has(e)) { pr.hitSet.add(e); damageEnemy(e, variance(pr.dmg)); }
+          }
+        }
+        return false; // expires by lifetime or wall, never on hit
+      }
       for (const e of S.enemies) {
         if (e.dead) continue;
         if (Math.hypot(e.x - pr.x, e.y - pr.y) < 0.55) {
           pr.life = 0;
-          // Small splash so a fireball can clear a tight pack.
-          for (const o of S.enemies) {
-            if (o.dead) continue;
-            if (Math.hypot(o.x - pr.x, o.y - pr.y) < 1.1) damageEnemy(o, variance(pr.dmg));
+          // Thrown knives hit a single target; fireballs splash a tight pack.
+          const splash = pr.kind === 'knife' ? 0 : 1.1;
+          if (splash === 0) {
+            damageEnemy(e, variance(pr.dmg));
+          } else {
+            for (const o of S.enemies) {
+              if (o.dead) continue;
+              if (Math.hypot(o.x - pr.x, o.y - pr.y) < splash) damageEnemy(o, variance(pr.dmg));
+            }
           }
           return true;
         }
@@ -609,6 +765,19 @@ const Game = (() => {
     S.floaters = S.floaters.filter((f) => f.t < 1.2);
   }
 
+  function updateEffects(dt) {
+    for (const fx of S.effects) fx.t += dt;
+    S.effects = S.effects.filter((fx) => fx.t < fx.dur);
+  }
+
+  function updateScheduled(dt) {
+    for (const s of S.scheduled) {
+      s.t -= dt;
+      if (s.t <= 0 && !s.done) { s.done = true; s.fn(); }
+    }
+    S.scheduled = S.scheduled.filter((s) => !s.done);
+  }
+
   function update(dt) {
     if (!S.running || S.paused || S.deathPending) return;
     S.time += dt;
@@ -623,9 +792,11 @@ const Game = (() => {
     }
     separateEnemies();
     updateProjectiles(dt);
+    updateScheduled(dt);
     updateTiles(dt);
     updateFog();
     updateFloaters(dt);
+    updateEffects(dt);
 
     // Autosave every 30 seconds.
     S.saveTimer += dt;
@@ -637,7 +808,7 @@ const Game = (() => {
 
   return {
     S, start, stop, update, save, saveState,
-    commandMove, castFireball, castHeal, respawn,
+    commandMove, castFireball, castHeal, castSkill, respawn,
     equipItem, destroyItem, recomputeDerived,
     VISION_RADIUS,
   };

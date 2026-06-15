@@ -283,17 +283,26 @@ const Sprites = (() => {
   // drawHeroSprite draws it and returns true; otherwise the caller falls
   // back to the procedural paper doll above.
 
+  // Per-class skill poses (one signature frame per skill, all directions).
+  const CLASS_SKILL_POSES = {
+    warrior: ['cleave', 'whirl', 'leap'],
+    mage: ['cast', 'frost', 'bolt'],
+    rogue: ['fan', 'dash', 'flurry'],
+  };
+
   const SPRITE_SOURCES = {};
   for (const cls of ['warrior', 'mage', 'rogue']) {
     SPRITE_SOURCES[cls] = {};
     for (const dir of ['front', 'back', 'side']) {
-      SPRITE_SOURCES[cls][dir] = {
+      const poses = {
         idle: `img/sprites/${cls}-${dir}.png`,
         walk: `img/sprites/${cls}-${dir}-walk.png`,
         attack: `img/sprites/${cls}-${dir}-attack.png`,
         windup: `img/sprites/${cls}-${dir}-windup.png`,
         hit: `img/sprites/${cls}-${dir}-hit.png`,
       };
+      for (const sp of CLASS_SKILL_POSES[cls]) poses[sp] = `img/sprites/${cls}-${dir}-${sp}.png`;
+      SPRITE_SOURCES[cls][dir] = poses;
     }
     // Death collapse exists as a single (front) frame per class.
     SPRITE_SOURCES[cls].front.death = `img/sprites/${cls}-death.png`;
@@ -342,7 +351,9 @@ const Sprites = (() => {
     let img = poses.idle;
     let isDeath = false;
     if (o.dead && set.front.death) { img = set.front.death; isDeath = true; }
-    else if (o.swing >= 0) {
+    else if (o.swing >= 0 && o.skillPose && poses[o.skillPose]) {
+      img = poses[o.skillPose]; // dedicated skill animation frame
+    } else if (o.swing >= 0) {
       img = (o.swing < 0.5 ? (poses.windup || poses.attack) : poses.attack) || poses.idle;
     } else if (o.flash && poses.hit) img = poses.hit;
     else if (o.moving && poses.walk && Math.sin(t * 11) > 0) img = poses.walk;

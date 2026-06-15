@@ -547,7 +547,8 @@ const Render = (() => {
     const opts = {
       x: s.x, y: s.y, scale: E * 0.36,
       facing: p.facing, moving: !!p.moving, time: S.time,
-      swing: p.swing > 0 ? 1 - p.swing / 0.18 : -1,
+      swing: p.swing > 0 ? 1 - p.swing / (p.swingMax || 0.18) : -1,
+      skillPose: p.skillPose,
       look: characterLook(S.char), cls: S.char.class,
       hasWeapon: S.items.some((it) => it.equipped && it.kind === 'weapon'),
       hasArmor: S.items.some((it) => it.equipped && it.kind === 'armor'),
@@ -561,25 +562,82 @@ const Render = (() => {
   function drawProjectiles(S) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
+    const PR_COLORS = {
+      fireball:  ['rgba(255,240,180,1)', 'rgba(255,140,40,0.9)', 'rgba(200,40,0,0)', 9],
+      bolt:      ['rgba(235,245,255,1)', 'rgba(110,180,255,0.9)', 'rgba(30,80,220,0)', 8],
+      knife:     ['rgba(245,245,250,1)', 'rgba(180,190,205,0.85)', 'rgba(80,90,110,0)', 5],
+      shadowbolt:['rgba(220,180,255,1)', 'rgba(140,40,200,0.8)', 'rgba(60,0,100,0)', 7],
+    };
     for (const pr of S.projectiles) {
       const s = worldToScreen(pr.x, pr.y);
       s.y -= E * 0.4; // projectiles fly at chest height
-      const fire = pr.kind === 'fireball';
-      const r = fire ? 9 : 7;
+      const [c0, c1, c2, r] = PR_COLORS[pr.kind] || PR_COLORS.shadowbolt;
       const g = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, r * 1.8);
-      if (fire) {
-        g.addColorStop(0, 'rgba(255,240,180,1)');
-        g.addColorStop(0.4, 'rgba(255,140,40,0.9)');
-        g.addColorStop(1, 'rgba(200,40,0,0)');
-      } else {
-        g.addColorStop(0, 'rgba(220,180,255,1)');
-        g.addColorStop(0.4, 'rgba(140,40,200,0.8)');
-        g.addColorStop(1, 'rgba(60,0,100,0)');
-      }
+      g.addColorStop(0, c0);
+      g.addColorStop(0.4, c1);
+      g.addColorStop(1, c2);
       ctx.fillStyle = g;
       ctx.beginPath();
       ctx.arc(s.x, s.y, r * 1.8, 0, Math.PI * 2);
       ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Transient skill visuals: expanding novas, slams, slashes, dash streaks.
+  function drawEffects(S) {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (const fx of S.effects) {
+      const k = Math.min(1, fx.t / fx.dur);
+      const c = worldToScreen(fx.x, fx.y);
+      const cy = c.y - TH * 0.6;
+      if (fx.kind === 'nova' || fx.kind === 'frost' || fx.kind === 'slam') {
+        const rad = (fx.radius || 2) * (TW / 2) * (0.25 + k * 0.95);
+        const a = (1 - k) * 0.8;
+        const col = fx.kind === 'frost' ? '120,210,255' : fx.kind === 'slam' ? '255,180,90' : '210,220,255';
+        ctx.lineWidth = Math.max(2, TH * 0.3 * (1 - k));
+        ctx.strokeStyle = `rgba(${col},${a})`;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, rad, rad * 0.5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        if (fx.kind !== 'nova') {
+          ctx.fillStyle = `rgba(${col},${a * 0.22})`;
+          ctx.beginPath();
+          ctx.ellipse(c.x, c.y, rad, rad * 0.5, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (fx.kind === 'cleave') {
+        const reach = (fx.range || 2) * (TW / 2);
+        const wc = Math.cos(fx.ang), ws = Math.sin(fx.ang);
+        let dx = wc - ws, dy = (wc + ws) / 2; const dl = Math.hypot(dx, dy) || 1; dx /= dl; dy /= dl;
+        const a = Math.atan2(dy, dx);
+        ctx.strokeStyle = `rgba(235,240,255,${(1 - k) * 0.85})`;
+        ctx.lineWidth = Math.max(2, TH * 0.28);
+        ctx.beginPath();
+        ctx.ellipse(c.x, cy, reach, reach * 0.5, a, -0.85 + k * 0.7, 0.85 + k * 0.7);
+        ctx.stroke();
+      } else if (fx.kind === 'dashline') {
+        const c2 = worldToScreen(fx.x2, fx.y2);
+        ctx.strokeStyle = `rgba(${fx.color || '200,200,255'},${(1 - k) * 0.7})`;
+        ctx.lineWidth = Math.max(2, TH * 0.5 * (1 - k));
+        ctx.beginPath();
+        ctx.moveTo(c.x, cy); ctx.lineTo(c2.x, c2.y - TH * 0.6); ctx.stroke();
+      } else if (fx.kind === 'slash') {
+        const off = TH * 0.7;
+        ctx.strokeStyle = `rgba(255,255,255,${(1 - k) * 0.9})`;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(c.x - off, cy - TH * 0.3 - off * 0.5);
+        ctx.lineTo(c.x + off, cy - TH * 0.3 + off * 0.5);
+        ctx.stroke();
+      } else if (fx.kind === 'heal') {
+        const rad = TW * 0.4 * (0.4 + k);
+        ctx.fillStyle = `rgba(90,220,120,${(1 - k) * 0.35})`;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y - TH * 0.7, rad, rad * 0.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
     ctx.restore();
   }
@@ -837,20 +895,33 @@ const Render = (() => {
     ctx.fillStyle = '#b0a288';
     ctx.fillText(`Level ${S.char.level}  ·  ${S.char.xp} / ${S.char.xpNext} XP`, W / 2, by - 4);
 
-    // Ability slots centered in the panel.
-    const size = 48, gap = 10;
-    const ax = W / 2 - (size * 3 + gap * 2) / 2, ay = H - PANEL_H / 2 - size / 2 - 4;
+    // Ability bar: basic attack, three class skills (Q/W/E), and heal (R).
     const p = S.player;
-    drawAbilityButton(ax, ay, size, 'LMB', true, 0, '⚔');
-    drawAbilityButton(ax + size + gap, ay, size, 'Q',
-      S.char.mana >= Shared.FIREBALL_COST, p.fireballCd / 0.6, '🔥');
-    drawAbilityButton(ax + (size + gap) * 2, ay, size, 'W',
-      S.char.mana >= Shared.HEAL_COST, p.healCd / 1.5, '✚');
+    const skills = Shared.SKILLS[S.char.class] || [];
+    const slots = [{ key: 'LMB', icon: '⚔️', ready: true, cd: 0 }];
+    for (const sk of skills) {
+      slots.push({
+        key: sk.key, icon: sk.icon,
+        ready: S.char.mana >= sk.cost && (p.skillCd[sk.id] || 0) <= 0,
+        cd: (p.skillCd[sk.id] || 0) / sk.cd,
+      });
+    }
+    slots.push({ key: 'R', icon: '❤️', ready: S.char.mana >= Shared.HEAL_COST && p.healCd <= 0, cd: p.healCd / 1.5 });
+
+    const size = 46, gap = 9;
+    const totalW = slots.length * size + (slots.length - 1) * gap;
+    let sx = W / 2 - totalW / 2;
+    const ay = H - PANEL_H / 2 - size / 2 - 4;
+    for (const s of slots) {
+      drawAbilityButton(sx, ay, size, s.key, s.ready, s.cd, s.icon);
+      sx += size + gap;
+    }
 
     // Controls hint at the panel's bottom edge.
     ctx.font = '11px Georgia';
     ctx.fillStyle = 'rgba(140,125,100,0.65)';
-    ctx.fillText('Click: move/attack · Q: fireball · W: heal · I: inventory · Esc: menu', W / 2, H - 6);
+    const names = skills.map((sk) => `${sk.key} ${sk.name}`).join(' · ');
+    ctx.fillText(`Click: move/attack · ${names} · R Heal · I Inventory · Esc Menu`, W / 2, H - 6);
 
     // Top-left: location, gold, hero.
     ctx.textAlign = 'left';
@@ -970,6 +1041,7 @@ const Render = (() => {
     }
 
     drawProjectiles(S);
+    drawEffects(S);
     drawDarkness(S);
     drawFloaters(S);
     drawAtmosphere(S);
