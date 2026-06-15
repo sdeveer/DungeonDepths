@@ -95,14 +95,17 @@
     brute:    { hp: 95,  dmg: 16, xp: 30,  speed: 1.8, range: 1.7, label: 'Demon Brute' },
   };
 
-  // Difficulty scaling with dungeon depth.
+  // Difficulty scaling with dungeon depth. Enemies must keep pace with a
+  // hero whose damage, HP and armor all climb steeply with levels and gear,
+  // so HP and (especially) damage ramp hard the deeper you go. Depth 1 is
+  // unchanged — the early game on-ramp stays gentle.
   function enemyStats(type, depth) {
     const base = ENEMIES[type];
-    const mult = 1 + 0.35 * Math.max(0, depth - 1);
+    const mult = 1 + 0.45 * Math.max(0, depth - 1);
     return {
       ...base,
       hp: Math.round(base.hp * mult),
-      dmg: Math.round(base.dmg * (1 + 0.22 * Math.max(0, depth - 1))),
+      dmg: Math.round(base.dmg * (1 + 0.34 * Math.max(0, depth - 1))),
       xp: Math.round(base.xp * (1 + 0.30 * Math.max(0, depth - 1))),
     };
   }
