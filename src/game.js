@@ -90,6 +90,12 @@ router.post('/characters', async (req, res, next) => {
     }
     if (!Shared.CLASSES[cls]) return res.status(400).json({ error: 'Invalid class' });
 
+    // Cap characters per account so a script can't bloat the database.
+    const { rows: cnt } = await db.query(
+      'SELECT count(*)::int AS n FROM characters WHERE account_id = $1', [req.session.accountId]
+    );
+    if (cnt[0].n >= 12) return res.status(400).json({ error: 'Character limit reached (12).' });
+
     const derived = Shared.derive(cls, 1, []);
     const seed = Math.floor(Math.random() * 2 ** 31);
     const { rows } = await db.query(

@@ -36,9 +36,15 @@ const UI = (() => {
   // ---------------------------------------------------------------------
   // Tooltip
 
+  // Escape any HTML metacharacters before interpolating into innerHTML.
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
   function showTooltip(item, x, y) {
     const color = Shared.RARITY[item.rarity].color;
-    let html = `<div class="tt-name" style="color:${color}">${item.name}</div>`;
+    let html = `<div class="tt-name" style="color:${color}">${esc(item.name)}</div>`;
     html += `<div class="tt-kind">${item.rarity} ${item.kind}</div>`;
     for (const [k, v] of Object.entries(item.stats || {})) {
       html += `<div class="tt-stat">+${v} ${STAT_LABELS[k] || k}</div>`;

@@ -68,10 +68,15 @@
         card.appendChild(portrait);
         const info = document.createElement('div');
         info.className = 'char-info';
-        info.innerHTML =
-          `<div class="char-name">${ch.name}</div>` +
-          `<div class="char-meta">Level ${ch.level} ${Shared.CLASSES[ch.class].label}` +
-          ` · depth ${ch.max_depth} · ${ch.gold} gold</div>`;
+        // Character name is user-controlled — use textContent, never innerHTML.
+        const nameEl = document.createElement('div');
+        nameEl.className = 'char-name';
+        nameEl.textContent = ch.name;
+        const metaEl = document.createElement('div');
+        metaEl.className = 'char-meta';
+        metaEl.textContent =
+          `Level ${ch.level} ${Shared.CLASSES[ch.class].label} · depth ${ch.max_depth} · ${ch.gold} gold`;
+        info.append(nameEl, metaEl);
         card.appendChild(info);
         const del = document.createElement('button');
         del.className = 'char-del';

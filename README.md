@@ -139,10 +139,17 @@ injection, item forging, instant max level — impossible.
 | Variable | Default | Description |
 | --- | --- | --- |
 | `PORT` | `3000` | Host port the game is published on |
-| `SESSION_SECRET` | — | Secret for signing session cookies. **Change it.** |
+| `SESSION_SECRET` | — | Cookie signing secret. **Must be a long random string** (≥16 chars); with `NODE_ENV=production` the server refuses to start otherwise. |
+| `NODE_ENV` | — | Set to `production` for real deployments (enables the strict secret check). |
+| `SECURE_COOKIES` | `false` | Set `true` when serving over HTTPS (behind a TLS proxy) so cookies get the `Secure` flag. |
 | `POSTGRES_USER` | `game` | Database user |
 | `POSTGRES_PASSWORD` | — | Database password. **Change it.** |
 | `POSTGRES_DB` | `game` | Database name |
+
+For a public deployment, run behind an HTTPS reverse proxy with
+`NODE_ENV=production` and `SECURE_COOKIES=true`. Requests are rate-limited,
+responses carry a strict CSP and the usual hardening headers, and all
+gameplay state is server-authoritative (see Anti-cheat model above).
 
 ## Development without Docker
 
