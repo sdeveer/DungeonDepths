@@ -61,9 +61,11 @@ skills stay locked. Choices persist server-side per character.
 
 ## How it plays
 
-- You start in the **Town of Last Light**: a fountain fully restores you,
-  stairs lead to depth 1, and a purple portal jumps straight to the deepest
-  level you've reached.
+- You start in the **Town of Last Light**: a fully-lit, torch-lit village
+  hub of houses, an inn, a smithy, market stalls and wandering townsfolk
+  around a central fountain plaza. The fountain fully restores you, stairs
+  lead to depth 1, and a purple portal jumps straight to the deepest level
+  you've reached.
 - Dungeons are procedurally generated (rooms + corridors), scattered with
   decor and torches, and shrouded in fog of war with a torch-glow vision
   radius. Find the stairs to descend.

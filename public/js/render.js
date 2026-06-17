@@ -78,8 +78,17 @@ const Render = (() => {
     trapPlate: 'trap-plate',
     trapSpikes: 'trap-spikes',
     decor: ['torch', 'sarcophagus', 'bones', 'pillar', 'stalagmite', 'rubble', 'statue', 'skulls'],
+    town: ['house', 'inn', 'smithy', 'stall', 'wagon', 'tree', 'lamppost',
+      'barrel', 'crates', 'signpost', 'banner', 'merchant', 'smith', 'villager'],
   };
-  const terrain = { themes: {}, cobbles: [], stairs: null, stairsDown: null, fountain: null, trapPlate: null, trapSpikes: null, decor: {} };
+  const terrain = { themes: {}, cobbles: [], stairs: null, stairsDown: null, fountain: null, trapPlate: null, trapSpikes: null, decor: {}, town: {} };
+
+  // On-screen height (in iso tile-heights) for each town prop.
+  const TOWN_SCALE = {
+    house: 4.2, inn: 5.2, smithy: 4.4, stall: 2.4, wagon: 2.2, tree: 4.4,
+    lamppost: 3.2, barrel: 1.2, crates: 1.4, signpost: 2.0, banner: 2.8,
+    merchant: 2.3, smith: 2.4, villager: 2.2,
+  };
   {
     const load = (name, cb) => {
       const im = new Image();
@@ -100,6 +109,7 @@ const Render = (() => {
     load(TERRAIN_SOURCES.trapPlate, (im) => { terrain.trapPlate = im; });
     load(TERRAIN_SOURCES.trapSpikes, (im) => { terrain.trapSpikes = im; });
     for (const n of TERRAIN_SOURCES.decor) load(n, (im) => { terrain.decor[n] = im; });
+    for (const n of TERRAIN_SOURCES.town) load(`town-${n}`, (im) => { terrain.town[n] = im; });
   }
 
   // Fog state per tile: hidden, remembered, or in view. Distance falloff
@@ -115,17 +125,21 @@ const Render = (() => {
   // Smooth torchlight: a radial darkness gradient pinned to the player,
   // squashed to the iso plane, with a soft flame flicker.
   function drawDarkness(S) {
+    // The town hub is brightly lit (wide radius, gentle edges); dungeons keep
+    // the tight, oppressive torch-glow falloff.
+    const town = S.level.depth === 0;
     const ps = worldToScreen(S.player.x, S.player.y);
     const flicker = 1 + Math.sin(S.time * 9) * 0.025 + Math.sin(S.time * 23) * 0.015;
-    const R = Game.VISION_RADIUS * TW * 0.62 * flicker;
+    const R = Game.VISION_RADIUS * TW * (town ? 1.3 : 0.62) * flicker;
+    const a1 = town ? 0.05 : 0.18, a2 = town ? 0.2 : 0.55, a3 = town ? 0.5 : 0.84;
     ctx.save();
     ctx.translate(ps.x, ps.y - TH / 2);
     ctx.scale(1, 0.55);
     const g = ctx.createRadialGradient(0, 0, R * 0.25, 0, 0, R);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(0.55, 'rgba(0,0,0,0.18)');
-    g.addColorStop(0.8, 'rgba(2,3,8,0.55)');
-    g.addColorStop(1, 'rgba(2,3,8,0.84)');
+    g.addColorStop(0.55, `rgba(0,0,0,${a1})`);
+    g.addColorStop(0.8, `rgba(2,3,8,${a2})`);
+    g.addColorStop(1, `rgba(2,3,8,${a3})`);
     ctx.fillStyle = g;
     ctx.fillRect(-canvas.width * 2, -canvas.height * 4, canvas.width * 4, canvas.height * 8);
     ctx.restore();
@@ -382,17 +396,41 @@ const Render = (() => {
   }
 
   function drawDecor(S, d, light) {
-    const kinds = THEME_DECOR[themeFor(S.level.depth)];
-    const img = kinds && terrain.decor[kinds[d.kind % kinds.length]];
-    if (!img) return;
+    // Town props name their sprite directly; dungeon decor indexes the
+    // current theme's prop list.
+    let img, ht;
+    if (d.sprite) {
+      img = terrain.town[d.sprite];
+      if (!img) return;
+      ht = TH * (TOWN_SCALE[d.sprite] || 2.0);
+    } else {
+      const kinds = THEME_DECOR[themeFor(S.level.depth)];
+      img = kinds && terrain.decor[kinds[d.kind % kinds.length]];
+      if (!img) return;
+      ht = TH * (DECOR_SCALE[kinds[d.kind % kinds.length]] || 1.4);
+    }
     const s = worldToScreen(d.x, d.y);
-    const ht = TH * (DECOR_SCALE[kinds[d.kind % kinds.length]] || 1.4);
     const wd = ht * (img.width / img.height);
     ctx.save();
     ctx.globalAlpha = Math.min(1, light + 0.1);
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, s.x - wd / 2, s.y + TH * 0.25 - ht, wd, ht);
     ctx.restore();
+
+    // Lamp posts cast a warm pool of light.
+    if (d.sprite === 'lamppost') {
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const flicker = 0.85 + Math.sin(S.time * 8 + d.x * 3) * 0.1;
+      const gy = s.y - ht * 0.72;
+      const g = ctx.createRadialGradient(s.x, gy, 2, s.x, gy, TW * 1.0 * flicker);
+      g.addColorStop(0, `rgba(255,190,90,${0.3 * Math.min(1, light + 0.2)})`);
+      g.addColorStop(0.5, `rgba(255,150,50,${0.12 * Math.min(1, light + 0.2)})`);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(s.x - TW, gy - TW, TW * 2, TW * 2);
+      ctx.restore();
+    }
   }
 
   // Wall-mounted torch with a flickering glow, hung on the left face.

@@ -831,6 +831,8 @@ const Game = (() => {
   function updateFog() {
     const { w, h } = S.level;
     const fog = S.fog;
+    // The town is a safe hub — no fog of war, the whole place is revealed.
+    if (S.level.depth === 0) { fog.visible.fill(1); fog.discovered.fill(1); return; }
     fog.visible.fill(0);
     const px = Math.floor(S.player.x), py = Math.floor(S.player.y);
     const r = VISION_RADIUS;

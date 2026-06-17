@@ -41,18 +41,48 @@ const Dungeon = (() => {
   // Town: a small safe hub with a fountain (full heal), stairs to depth 1,
   // and a portal that jumps to the deepest level reached.
   function generateTown() {
-    const w = 22, h = 16;
+    const w = 26, h = 18;
     const map = new Array(w * h).fill(T.WALL);
     carveRoom(map, w, { x: 2, y: 2, w: w - 4, h: h - 4 });
-    map[8 * w + 5] = T.FOUNTAIN;
-    map[8 * w + 16] = T.STAIRS;
-    map[3 * w + 11] = T.PORTAL;
+    map[8 * w + 12] = T.FOUNTAIN;  // central plaza fountain
+    map[8 * w + 20] = T.STAIRS;    // stairs down, east side
+    map[3 * w + 4] = T.PORTAL;     // recall portal, northwest
+
+    // Hand-placed town dressing (purely visual decor, drawn depth-sorted).
+    // `sprite` names a town prop image; positions frame the fountain plaza.
+    const decor = [
+      // Buildings along the back of the plaza.
+      { x: 6.8, y: 3.0, sprite: 'house' },
+      { x: 11.0, y: 2.8, sprite: 'inn' },
+      { x: 16.5, y: 3.0, sprite: 'smithy' },
+      { x: 21.0, y: 3.3, sprite: 'house' },
+      { x: 13.6, y: 3.0, sprite: 'banner' },
+      { x: 23.0, y: 5.6, sprite: 'tree' },
+      { x: 3.4, y: 5.6, sprite: 'tree' },
+      // Market: stalls with vendors, a cart, townsfolk.
+      { x: 7.5, y: 11.6, sprite: 'stall' },
+      { x: 8.9, y: 11.1, sprite: 'merchant' },
+      { x: 17.8, y: 11.6, sprite: 'stall' },
+      { x: 16.6, y: 5.9, sprite: 'smith' },
+      { x: 13.6, y: 12.3, sprite: 'villager' },
+      { x: 10.4, y: 12.7, sprite: 'wagon' },
+      // Lamp posts around the plaza edges.
+      { x: 4.5, y: 7.0, sprite: 'lamppost' },
+      { x: 20.5, y: 7.2, sprite: 'lamppost' },
+      { x: 4.5, y: 12.2, sprite: 'lamppost' },
+      { x: 20.5, y: 12.2, sprite: 'lamppost' },
+      // Clutter.
+      { x: 6.5, y: 5.6, sprite: 'barrel' },
+      { x: 18.7, y: 5.6, sprite: 'crates' },
+      { x: 14.6, y: 13.4, sprite: 'signpost' },
+    ];
+
     return {
       w, h, map, depth: 0,
-      entry: { x: 11, y: 11 },
+      entry: { x: 12, y: 13 },
       rooms: [{ x: 2, y: 2, w: w - 4, h: h - 4 }],
       enemies: [],
-      decor: [],
+      decor,
       traps: [],
     };
   }
