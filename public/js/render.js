@@ -87,7 +87,8 @@ const Render = (() => {
   const TOWN_SCALE = {
     house: 4.2, inn: 5.2, smithy: 4.4, stall: 2.4, wagon: 2.2, tree: 4.4,
     lamppost: 3.2, barrel: 1.2, crates: 1.4, signpost: 2.0, banner: 2.8,
-    merchant: 2.3, smith: 2.4, villager: 2.2,
+    // Townsfolk are people — keep them about the hero's height (~1.5 tiles).
+    merchant: 1.5, smith: 1.55, villager: 1.45,
   };
   {
     const load = (name, cb) => {
@@ -411,6 +412,23 @@ const Render = (() => {
     }
     const s = worldToScreen(d.x, d.y);
     const wd = ht * (img.width / img.height);
+
+    if (d.npc) {
+      // Wandering townsfolk: a walk bob when moving, a faint idle sway when
+      // standing, flipped to face their travel direction.
+      const bob = d.moving
+        ? Math.abs(Math.cos(S.time * 9)) * TH * 0.12
+        : Math.sin(S.time * 2 + d.x * 2) * TH * 0.04;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, light + 0.1);
+      ctx.imageSmoothingEnabled = false;
+      ctx.translate(s.x, s.y + TH * 0.25 - bob);
+      if (d.flip) ctx.scale(-1, 1);
+      ctx.drawImage(img, -wd / 2, -ht, wd, ht);
+      ctx.restore();
+      return;
+    }
+
     ctx.save();
     ctx.globalAlpha = Math.min(1, light + 0.1);
     ctx.imageSmoothingEnabled = false;

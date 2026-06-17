@@ -61,10 +61,10 @@ const Dungeon = (() => {
       { x: 3.4, y: 5.6, sprite: 'tree' },
       // Market: stalls with vendors, a cart, townsfolk.
       { x: 7.5, y: 11.6, sprite: 'stall' },
-      { x: 8.9, y: 11.1, sprite: 'merchant' },
+      { x: 8.9, y: 11.1, sprite: 'merchant', npc: true },
       { x: 17.8, y: 11.6, sprite: 'stall' },
-      { x: 16.6, y: 5.9, sprite: 'smith' },
-      { x: 13.6, y: 12.3, sprite: 'villager' },
+      { x: 16.6, y: 5.9, sprite: 'smith', npc: true },
+      { x: 13.6, y: 12.3, sprite: 'villager', npc: true },
       { x: 10.4, y: 12.7, sprite: 'wagon' },
       // Lamp posts around the plaza edges.
       { x: 4.5, y: 7.0, sprite: 'lamppost' },

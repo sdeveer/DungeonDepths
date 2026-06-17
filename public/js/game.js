@@ -793,6 +793,33 @@ const Game = (() => {
     } catch (err) { /* offline: no gold change applied */ }
   }
 
+  // Townsfolk wander leisurely around their home spot (town only, cosmetic).
+  function updateTownNpcs(dt) {
+    if (!S.level || S.level.depth !== 0) return;
+    for (const d of S.level.decor) {
+      if (!d.npc) continue;
+      if (!d.home) { d.home = { x: d.x, y: d.y }; d.pauseT = Math.random() * 2.5; }
+      if (d.pauseT > 0) { d.pauseT -= dt; d.moving = false; continue; }
+      if (!d.target) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * 1.6;
+        const tx = d.home.x + Math.cos(a) * r, ty = d.home.y + Math.sin(a) * r;
+        if (Dungeon.boxWalkable(S.level, tx, ty, 0.25)) d.target = { x: tx, y: ty };
+        else d.pauseT = 0.5;
+        continue;
+      }
+      const dx = d.target.x - d.x, dy = d.target.y - d.y;
+      const dd = Math.hypot(dx, dy);
+      if (dd < 0.12) { d.target = null; d.pauseT = 1 + Math.random() * 3; d.moving = false; continue; }
+      const step = Math.min(0.75 * dt, dd);
+      const nx = d.x + (dx / dd) * step, ny = d.y + (dy / dd) * step;
+      if (Dungeon.boxWalkable(S.level, nx, ny, 0.25)) {
+        d.flip = (dx - dy) < 0; // face screen-space travel direction
+        d.x = nx; d.y = ny; d.moving = true;
+      } else { d.target = null; d.pauseT = 0.4; d.moving = false; }
+    }
+  }
+
   function updateTiles(dt) {
     S.descendLock = Math.max(0, S.descendLock - dt);
     S.fountainCooldown = Math.max(0, S.fountainCooldown - dt);
@@ -885,6 +912,7 @@ const Game = (() => {
     updateProjectiles(dt);
     updateScheduled(dt);
     updateTraps(dt);
+    updateTownNpcs(dt);
     updateTiles(dt);
     updateFog();
     updateFloaters(dt);
